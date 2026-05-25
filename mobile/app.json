@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "סיקרט",
+    "slug": "sikret",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "sikret",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#05060F"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sikret.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "CFBundleDevelopmentRegion": "he",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.sikret.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#05060F"
+      }
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+---
+pid: 85276
+cwd: /Users/kobihaim
+---
+kobihaim@MacBook-Pro-sl-KOBI ~ % 
