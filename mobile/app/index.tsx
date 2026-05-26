@@ -8,6 +8,7 @@ import { GlassCard, OutlineButton, PrimaryButton, Subtitle } from '../src/compon
 import { copy } from '../src/copy';
 import { useApp } from '../src/context/AppContext';
 import { colors, spacing } from '../src/theme';
+import { hebrewText } from '../src/typography';
 
 export default function HomeScreen() {
   const { me, refreshMe } = useApp();
@@ -70,24 +71,27 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 32,
     fontWeight: '800',
-    textAlign: 'right',
+    alignSelf: 'stretch',
+    ...hebrewText,
   },
   tagline: {
     color: colors.neonCyan,
-    textAlign: 'right',
     marginTop: 6,
     fontSize: 16,
     fontWeight: '500',
+    alignSelf: 'stretch',
+    ...hebrewText,
   },
   center: { alignItems: 'center' },
-  statLabel: { color: colors.textMuted, textAlign: 'right', fontSize: 13 },
+  statLabel: { color: colors.textMuted, fontSize: 13, alignSelf: 'stretch', ...hebrewText },
   statValue: {
     color: colors.textPrimary,
     fontSize: 36,
     fontWeight: '700',
-    textAlign: 'right',
     marginVertical: 4,
+    alignSelf: 'stretch',
+    ...hebrewText,
   },
-  statHint: { color: colors.textSecondary, textAlign: 'right', fontSize: 14 },
+  statHint: { color: colors.textSecondary, fontSize: 14, alignSelf: 'stretch', ...hebrewText },
   warn: { color: colors.warning, textAlign: 'center', marginTop: spacing.sm },
 });

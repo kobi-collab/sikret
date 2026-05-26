@@ -1,6 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, StyleSheet, Text, TextInput, View, ViewStyle } from 'react-native';
 import { colors, radii, spacing } from '../theme';
+import { hebrewCenter, hebrewText } from '../typography';
 
 export function Title({ children }: { children: string }) {
   return <Text style={styles.title}>{children}</Text>;
@@ -102,15 +103,17 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 28,
     fontWeight: '700',
-    textAlign: 'right',
     marginBottom: spacing.sm,
+    alignSelf: 'stretch',
+    ...hebrewText,
   },
   subtitle: {
     color: colors.textSecondary,
     fontSize: 15,
     lineHeight: 22,
-    textAlign: 'right',
     marginBottom: spacing.lg,
+    alignSelf: 'stretch',
+    ...hebrewText,
   },
   card: {
     backgroundColor: colors.glass,
@@ -147,6 +150,7 @@ const styles = StyleSheet.create({
     color: colors.bgVoid,
     fontSize: 17,
     fontWeight: '700',
+    ...hebrewCenter,
   },
   outline: {
     borderRadius: radii.button,
@@ -164,6 +168,7 @@ const styles = StyleSheet.create({
     color: colors.neonCyan,
     fontSize: 15,
     fontWeight: '600',
+    ...hebrewCenter,
   },
   input: {
     backgroundColor: colors.bgDeep,

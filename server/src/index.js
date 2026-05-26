@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { runBotIfStale } from './botMatch.js';
 import { startBotWorker } from './botWorker.js';
 import { tryMatch } from './match.js';
 import {
@@ -164,16 +165,24 @@ app.post('/api/queue/join', (req, res) => {
   res.json({ status: 'matched', swapId: swap.id });
 });
 
+function finishQueueStatus(data, userId, res) {
+  runBotIfStale(data, userId);
+  const active = activeSwapForUser(data, userId);
+  if (active) {
+    saveStore(data);
+    return res.json({ status: 'matched', swapId: active.id });
+  }
+  const entry = data.queue.find((q) => q.userId === userId && !q.matched);
+  saveStore(data);
+  if (entry) return res.json({ status: 'queued', queueId: entry.id });
+  return res.json({ status: 'idle' });
+}
+
 app.get('/api/queue/status', (req, res) => {
   const data = loadStore();
   const userId = req.headers['x-user-id'];
-  const entry = data.queue.find((q) => q.userId === userId && !q.matched);
-  const active = activeSwapForUser(data, userId);
-  if (active) {
-    return res.json({ status: 'matched', swapId: active.id });
-  }
-  if (entry) return res.json({ status: 'queued', queueId: entry.id });
-  res.json({ status: 'idle' });
+  if (!userId) return res.status(401).json({ error: 'unknown_user' });
+  finishQueueStatus(data, userId, res);
 });
 
 app.delete('/api/queue/leave', (req, res) => {

@@ -111,7 +111,9 @@ eas submit --platform ios --latest
 **גיל:** 17+ (תוכן שנוצר על ידי משתמשים)
 
 **מדיניות פרטיות (URL):**  
-העלה את `docs/PRIVACY.md` ל-GitHub Pages / Notion / אתר — והדבק את ה-URL.
+https://www.tgbc.co.il/sikret-privacy — הוראות Wix: `docs/WIX-TGBC-SIKRET.md`  
+**תמיכה:** https://www.tgbc.co.il/sikret-support · office@tgbc.co.il  
+**מטא-דאטה מלא:** `APP_STORE_METADATA.md`
 
 **תמיכה (URL):** מייל או טופס (חובה שדה תמיכה).
 

@@ -1,11 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { ReactNode } from 'react';
-import { I18nManager, ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
+import { ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing } from '../theme';
-
-I18nManager.allowRTL(true);
-I18nManager.forceRTL(true);
 
 type Props = {
   children: ReactNode;

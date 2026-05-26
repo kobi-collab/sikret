@@ -30,16 +30,21 @@ export default function QueueScreen() {
     const joinTimeout = setTimeout(() => {
       Alert.alert(
         'אין חיבור לשרת',
-        `ודא שהשרת רץ (start.sh) והטלפון באותו Wi‑Fi.\n${getApiHost()}`,
+        `השרת בענן עלול להתעורר לאט (עד דקה). נסה שוב.\n${getApiHost()}`,
       );
       router.back();
-    }, 12000);
+    }, 45000);
 
     (async () => {
-      const ok = await pingApi();
+      setHint(copy.queueWaking);
+      let ok = await pingApi();
+      if (!ok) {
+        await new Promise((r) => setTimeout(r, 2500));
+        ok = await pingApi();
+      }
       if (!ok) {
         clearTimeout(joinTimeout);
-        Alert.alert('אין חיבור לשרת', `הפעל start.sh\n${getApiHost()}`);
+        Alert.alert('אין חיבור לשרת', `בדוק אינטרנט או נסה שוב בעוד רגע.\n${getApiHost()}`);
         router.back();
         return;
       }
@@ -122,5 +127,5 @@ export default function QueueScreen() {
 }
 
 const styles = StyleSheet.create({
-  hint: { color: colors.textSecondary, textAlign: 'center', marginTop: 16, fontSize: 15 },
+  hint: { color: colors.textSecondary, textAlign: 'center', writingDirection: 'rtl', marginTop: 16, fontSize: 15 },
 });

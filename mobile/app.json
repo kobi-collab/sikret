@@ -8,6 +8,7 @@
     "userInterfaceStyle": "dark",
     "scheme": "sikret",
     "newArchEnabled": true,
+    "supportsRTL": true,
     "splash": {
       "backgroundColor": "#05060F"
     },
@@ -26,14 +27,17 @@
         "backgroundColor": "#05060F"
       }
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+        "projectId": "6e37f629-2c5d-4e5d-9b0b-a24dc3206b05"
       }
-    }
+    },
+    "owner": "kobihaim"
   }
 }

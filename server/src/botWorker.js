@@ -1,7 +1,8 @@
+import { BOT_WAIT_MS } from './botMatch.js';
 import { createBotSwap } from './match.js';
 import { loadStore, saveStore } from './store.js';
 
-const BOT_WAIT_MS = 8000;
+export { BOT_WAIT_MS };
 const TICK_MS = 2000;
 
 export function startBotWorker() {

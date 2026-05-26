@@ -21,9 +21,21 @@ function hostFromExpoLan(): string | null {
   return null;
 }
 
+function readProductionApiUrl(): string | null {
+  const extra = Constants.expoConfig?.extra as { apiUrl?: unknown } | undefined;
+  const fromExtra = extra?.apiUrl;
+  if (typeof fromExtra === 'string' && fromExtra.length > 0) {
+    return fromExtra.replace(/\/$/, '');
+  }
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
+  if (typeof fromEnv === 'string' && fromEnv.length > 0) {
+    return fromEnv.replace(/\/$/, '');
+  }
+  return null;
+}
+
 function resolveApiHost(): string {
-  const extra = Constants.expoConfig?.extra as { apiUrl?: string | null } | undefined;
-  const configured = extra?.apiUrl?.replace(/\/$/, '');
+  const configured = readProductionApiUrl();
 
   if (configured && !configured.includes('127.0.0.1') && !configured.includes('localhost')) {
     return configured;

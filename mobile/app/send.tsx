@@ -5,6 +5,7 @@ import { Screen } from '../src/components/Screen';
 import { GlassCard, PrimaryButton, Subtitle, Title } from '../src/components/UI';
 import { copy } from '../src/copy';
 import { colors, spacing } from '../src/theme';
+import { hebrewText } from '../src/typography';
 
 export default function SendScreen() {
   return (
@@ -24,5 +25,5 @@ export default function SendScreen() {
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', marginBottom: spacing.sm },
-  warn: { color: colors.warning, textAlign: 'right', lineHeight: 22, fontSize: 14 },
+  warn: { color: colors.warning, lineHeight: 22, fontSize: 14, alignSelf: 'stretch', ...hebrewText },
 });
