@@ -91,3 +91,4 @@ eas submit --platform android
 ---
 
 *נבנה לפי PRD מאי 2026*
+# sikret
