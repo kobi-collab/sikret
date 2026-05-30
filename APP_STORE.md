@@ -108,7 +108,7 @@ eas submit --platform ios --latest
 **תיאור קצר:** מתוודים על סוד, מקבלים סוד זר בתמורה. אנונימי. טקסט בלבד.  
 **מילות מפתח:** סוד, וידוי, אנונימי, שיתוף, תמיכה  
 **קטגוריה:** Social Networking או Lifestyle  
-**גיל:** 17+ (תוכן שנוצר על ידי משתמשים)
+**גיל:** **18+** (ב-App Store Connect → Age Rating — הגדר בהתאם; לא 17+)
 
 **מדיניות פרטיות (URL):**  
 https://www.tgbc.co.il/sikret-privacy — הוראות Wix: `docs/WIX-TGBC-SIKRET.md`  

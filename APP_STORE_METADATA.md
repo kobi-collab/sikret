@@ -88,7 +88,7 @@ https://www.tgbc.co.il
 | Horror / Violence | None |
 | Gambling | None |
 
-**תוצאה צפויה:** 17+ (בגלל UGC)
+**תוצאה ב-Connect:** הגדר **18+** (לא 17+) — אפליקציה מיועדת למבוגרים, UGC, אין מודרציה ידנית 24/7 בזמן אמת.
 
 ---
 
@@ -105,7 +105,7 @@ https://www.tgbc.co.il
 
 ---
 
-# חלק ב — App Review Information (אנגלית — לסוקר)
+# App Review response (Guideline 1.2): see **APP_REVIEW_RESPONSE.md**
 
 **Contact:** office@tgbc.co.il  
 **Phone:** [המספר שלך — חובה למלא ב-Connect]  

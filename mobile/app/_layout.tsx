@@ -3,18 +3,24 @@ import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, I18nManager, View } from 'react-native';
 import { useEffect } from 'react';
 import { AppProvider, useApp } from '../src/context/AppContext';
+import { routes } from '../src/routes';
 import { colors } from '../src/theme';
 
 I18nManager.allowRTL(true);
 
 function RootNav() {
-  const { ready, onboardingDone } = useApp();
+  const { ready, onboardingDone, eulaAccepted, me } = useApp();
 
   useEffect(() => {
-    if (ready && !onboardingDone) {
+    if (!ready) return;
+    if (!onboardingDone) {
       router.replace('/onboarding');
+      return;
     }
-  }, [ready, onboardingDone]);
+    if (!eulaAccepted && !me?.eulaAccepted) {
+      router.replace(routes.terms);
+    }
+  }, [ready, onboardingDone, eulaAccepted, me?.eulaAccepted]);
 
   if (!ready) {
     return (

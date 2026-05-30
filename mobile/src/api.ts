@@ -90,9 +90,12 @@ async function request<T>(
   clearTimeout(timeout);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = new Error(body.error || 'request_failed') as Error & { code?: string; data?: unknown };
+    const err = new Error(body.error || body.message || 'request_failed') as Error & {
+      code?: string;
+      data?: unknown;
+    };
     err.code = body.error;
-    (err as Error & { data: unknown }).data = body;
+    err.data = body;
     throw err;
   }
   return body as T;
@@ -117,6 +120,8 @@ export type MeResponse = {
   resonance: number;
   trustScore: number;
   suspendedUntil: number | null;
+  banned?: boolean;
+  eulaAccepted?: boolean;
   dailyCompleted: number;
   dailyLimit: number;
   canStart: boolean;
@@ -134,6 +139,7 @@ export type SwapView = {
   bothLocked: boolean;
   isBot: boolean;
   peerContent: string | null;
+  peerHidden?: boolean;
   peerAlias: string;
   peerResonance: number;
   myResonance: number;
@@ -150,6 +156,15 @@ export type FeedbackResponse = {
   envelopeFeedback: 'touched' | 'dishonest' | 'report' | null;
 };
 
+export type ReportResponse = {
+  ok: boolean;
+  hidden: boolean;
+  reportId: string;
+  message: string;
+  peerContent: null;
+  phase: string;
+};
+
 export const api = {
   register: (userId?: string | null) =>
     request<{ userId: string }>('/api/users', {
@@ -158,6 +173,12 @@ export const api = {
     }),
 
   me: (userId: string) => request<MeResponse>('/api/me', { userId }),
+
+  acceptEula: (userId: string) =>
+    request<{ ok: boolean; eulaAcceptedAt: number }>('/api/eula/accept', {
+      method: 'POST',
+      userId,
+    }),
 
   joinQueue: (userId: string, payload: { intention: string; content: string }) =>
     request<{ status: string; swapId?: string; queueId?: string }>('/api/queue/join', {
@@ -178,11 +199,24 @@ export const api = {
   lockSwap: (userId: string, swapId: string) =>
     request<SwapView>(`/api/swaps/${swapId}/lock`, { method: 'POST', userId }),
 
-  feedback: (userId: string, swapId: string, type: 'touched' | 'dishonest' | 'report') =>
+  feedback: (userId: string, swapId: string, type: 'touched' | 'dishonest') =>
     request<FeedbackResponse>(`/api/swaps/${swapId}/feedback`, {
       method: 'POST',
       userId,
       body: JSON.stringify({ type }),
+    }),
+
+  reportSwap: (userId: string, swapId: string) =>
+    request<ReportResponse>(`/api/swaps/${swapId}/report`, {
+      method: 'POST',
+      userId,
+      body: JSON.stringify({}),
+    }),
+
+  hideSwap: (userId: string, swapId: string) =>
+    request<{ ok: boolean; hidden: boolean }>(`/api/swaps/${swapId}/hide`, {
+      method: 'POST',
+      userId,
     }),
 
   complete: (userId: string, swapId: string) =>

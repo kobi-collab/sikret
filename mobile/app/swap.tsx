@@ -11,6 +11,7 @@ import { GlassCard, OutlineButton, PrimaryButton, Subtitle, Title } from '../src
 import { copy } from '../src/copy';
 import { useApp } from '../src/context/AppContext';
 import { colors, spacing } from '../src/theme';
+import { hebrewText } from '../src/typography';
 
 function feedbackLabel(type: string | null) {
   if (type === 'touched') return copy.feedbackTouched;
@@ -24,12 +25,16 @@ export default function SwapScreen() {
   const { userId, refreshMe, setDraft } = useApp();
   const [swap, setSwap] = useState<SwapView | null>(null);
   const [reveal, setReveal] = useState<FeedbackResponse | null>(null);
+  const [contentHidden, setContentHidden] = useState(false);
 
   const poll = useCallback(async () => {
-    if (!userId || !id) return;
+    if (!userId || !id || contentHidden) return;
     const s = await api.getSwap(userId, id);
     setSwap(s);
-  }, [userId, id]);
+    if (s.peerHidden || !s.peerContent) {
+      setContentHidden(true);
+    }
+  }, [userId, id, contentHidden]);
 
   useFocusEffect(
     useCallback(() => {
@@ -50,20 +55,42 @@ export default function SwapScreen() {
     setReveal(result);
   };
 
-  const feedback = async (type: 'touched' | 'dishonest' | 'report') => {
+  const hideContent = async () => {
     if (!userId || !id) return;
-    if (type === 'report') {
-      Alert.alert('דיווח', 'הדיווח נשלח. תודה על שמירה על הקהילה.', [
-        {
-          text: 'אישור',
-          onPress: async () => {
-            const result = await api.feedback(userId, id, type);
-            onFeedbackDone(result);
-          },
+    await api.hideSwap(userId, id);
+    setContentHidden(true);
+    setSwap((prev) => (prev ? { ...prev, peerContent: null, peerHidden: true, phase: 'hidden' } : prev));
+    await refreshMe();
+    Alert.alert(copy.contentRemoved, '', [{ text: 'אישור', onPress: finish }]);
+  };
+
+  const report = () => {
+    if (!userId || !id) return;
+    Alert.alert(copy.reportConfirmTitle, 'האם לדווח על הסוד ולהסירו מהמסך?', [
+      { text: 'ביטול', style: 'cancel' },
+      {
+        text: copy.feedbackReport,
+        style: 'destructive',
+        onPress: async () => {
+          setContentHidden(true);
+          setSwap((prev) => (prev ? { ...prev, peerContent: null, peerHidden: true, phase: 'hidden' } : prev));
+          try {
+            await api.reportSwap(userId, id);
+            Alert.alert(copy.reportConfirmTitle, copy.reportConfirmBody, [
+              { text: 'אישור', onPress: finish },
+            ]);
+          } catch {
+            Alert.alert('שגיאה', 'לא הצלחנו לשלוח דיווח. נסה שוב.');
+            setContentHidden(false);
+            poll();
+          }
         },
-      ]);
-      return;
-    }
+      },
+    ]);
+  };
+
+  const feedback = async (type: 'touched' | 'dishonest') => {
+    if (!userId || !id) return;
     const result = await api.feedback(userId, id, type);
     onFeedbackDone(result);
   };
@@ -77,9 +104,18 @@ export default function SwapScreen() {
     );
   }
 
-  const opened = swap.phase === 'opened' && swap.peerContent;
+  const opened = swap.phase === 'opened' && swap.peerContent && !contentHidden;
 
   if (!opened) {
+    if (contentHidden || swap.peerHidden) {
+      return (
+        <Screen>
+          <Title>{copy.contentRemoved}</Title>
+          <Subtitle>{copy.reportConfirmBody}</Subtitle>
+          <PrimaryButton label="חזרה לבית" onPress={finish} />
+        </Screen>
+      );
+    }
     return (
       <Screen>
         <EnvelopeOrb mode="queue" />
@@ -110,7 +146,8 @@ export default function SwapScreen() {
       <Subtitle>{copy.swapRateQuestion}</Subtitle>
       <PrimaryButton label={copy.feedbackTouched} onPress={() => feedback('touched')} />
       <OutlineButton label={copy.feedbackDishonest} onPress={() => feedback('dishonest')} />
-      <OutlineButton label={copy.feedbackReport} onPress={() => feedback('report')} danger />
+      <OutlineButton label={copy.feedbackReport} onPress={report} danger />
+      <OutlineButton label={copy.hideFromScreen} onPress={hideContent} />
       <OutlineButton
         label={copy.finishNoRate}
         onPress={async () => {
@@ -133,12 +170,12 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 17,
     lineHeight: 26,
-    textAlign: 'right',
+    ...hebrewText,
   },
   secretFb: {
     color: colors.neonCyan,
-    textAlign: 'right',
     fontSize: 14,
     lineHeight: 22,
+    ...hebrewText,
   },
 });

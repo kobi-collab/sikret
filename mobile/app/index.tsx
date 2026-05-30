@@ -8,10 +8,11 @@ import { GlassCard, OutlineButton, PrimaryButton, Subtitle } from '../src/compon
 import { copy } from '../src/copy';
 import { useApp } from '../src/context/AppContext';
 import { colors, spacing } from '../src/theme';
+import { routes } from '../src/routes';
 import { hebrewText } from '../src/typography';
 
 export default function HomeScreen() {
-  const { me, refreshMe } = useApp();
+  const { me, refreshMe, eulaAccepted } = useApp();
 
   useFocusEffect(
     useCallback(() => {
@@ -19,8 +20,18 @@ export default function HomeScreen() {
     }, [refreshMe]),
   );
 
+  if (me?.banned) {
+    router.replace('/suspended');
+    return null;
+  }
+
   if (me?.suspendedUntil && me.suspendedUntil > Date.now()) {
     router.replace('/suspended');
+    return null;
+  }
+
+  if (!eulaAccepted && !me?.eulaAccepted) {
+    router.replace(routes.terms);
     return null;
   }
 
@@ -61,6 +72,7 @@ export default function HomeScreen() {
         <Text style={styles.warn}>הגעת למכסה היומית. חוזר בחצות.</Text>
       )}
       <OutlineButton label={copy.howItWorks} onPress={() => router.push('/onboarding')} />
+      <OutlineButton label={copy.supportLink} onPress={() => router.push(routes.support)} />
     </Screen>
   );
 }

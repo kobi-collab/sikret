@@ -1,9 +1,20 @@
 import cors from 'cors';
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { createAdminRouter } from './adminRoutes.js';
 import { runBotIfStale } from './botMatch.js';
 import { startBotWorker } from './botWorker.js';
 import { tryMatch } from './match.js';
+import { filterSecretContent } from './moderation/filter.js';
+import { createReport } from './moderation/reports.js';
+import {
+  hideSwapForUser,
+  peerContentForUser,
+  redactPeerContent,
+  reportedContentSnapshot,
+  reportedUserId,
+} from './moderation/swaps.js';
+import { applyReportPenalty, isBanned } from './moderation/users.js';
 import {
   applyEnvelopeRating,
   botResonance,
@@ -26,6 +37,9 @@ function getOrCreateUser(data, userId) {
       reputation: DEFAULT_RESONANCE,
       trustScore: 50,
       suspendedUntil: null,
+      banned: false,
+      bannedAt: null,
+      eulaAcceptedAt: null,
       completedSwaps: 0,
       firstCompletedAt: null,
       daily: {},
@@ -34,16 +48,29 @@ function getOrCreateUser(data, userId) {
     };
     return data.users[id];
   }
-  return data.users[userId];
+  const user = data.users[userId];
+  if (user.banned === undefined) user.banned = false;
+  if (user.eulaAcceptedAt === undefined) user.eulaAcceptedAt = null;
+  return user;
+}
+
+function requireEula(user, res) {
+  if (!user.eulaAcceptedAt) {
+    res.status(403).json({ error: 'eula_required' });
+    return false;
+  }
+  return true;
 }
 
 function dailyLimit(user) {
-  const day = user.daily[todayKey()] || { completed: 0 };
   if (!user.firstCompletedAt) return 2;
   return 3;
 }
 
 function canStartSwap(user) {
+  if (isBanned(user)) {
+    return { ok: false, reason: 'banned' };
+  }
   if (user.suspendedUntil && user.suspendedUntil > Date.now()) {
     return { ok: false, reason: 'suspended', until: user.suspendedUntil };
   }
@@ -59,7 +86,7 @@ function activeSwapForUser(data, userId) {
   return Object.values(data.swaps).find(
     (s) =>
       (s.userA === userId || s.userB === userId) &&
-      !['completed', 'abandoned'].includes(s.status),
+      !['completed', 'abandoned', 'removed'].includes(s.status),
   );
 }
 
@@ -69,17 +96,19 @@ function swapViewForUser(swap, userId, data) {
   const peerId = isA ? swap.userB : swap.userA;
   const peerUser = peerId !== 'bot' ? data.users[peerId] : null;
   const myRatingFromPeer = isA ? swap.ratingByB : swap.ratingByA;
+  const peerContent = exchanged ? peerContentForUser(swap, userId) : null;
 
   return {
     id: swap.id,
     intention: swap.intention,
     status: swap.status,
-    phase: exchanged ? 'opened' : 'waiting_match',
+    phase: exchanged && peerContent ? 'opened' : exchanged ? 'hidden' : 'waiting_match',
     myLocked: true,
     peerLocked: true,
     bothLocked: true,
     isBot: swap.isBot,
-    peerContent: exchanged ? (isA ? swap.contentB : swap.contentA) : null,
+    peerContent,
+    peerHidden: exchanged && !peerContent,
     peerAlias: swap.isBot ? 'סוד-ערפילי' : isA ? 'סוד-כחול' : 'סוד-ורוד',
     peerResonance: swap.isBot ? botResonance() : getResonance(peerUser),
     myResonance: getResonance(data.users[userId]),
@@ -87,7 +116,20 @@ function swapViewForUser(swap, userId, data) {
   };
 }
 
+function completeSwapForUser(data, swap, userId) {
+  const user = data.users[userId];
+  if (!user.daily[todayKey()]) user.daily[todayKey()] = { completed: 0 };
+  if (swap.status !== 'completed') {
+    user.daily[todayKey()].completed += 1;
+    if (!user.firstCompletedAt) user.firstCompletedAt = Date.now();
+    user.completedSwaps += 1;
+    swap.status = 'completed';
+  }
+}
+
 app.get('/health', (_, res) => res.json({ ok: true }));
+
+app.use('/admin', createAdminRouter());
 
 app.post('/api/users', (req, res) => {
   const data = loadStore();
@@ -95,6 +137,15 @@ app.post('/api/users', (req, res) => {
   const user = getOrCreateUser(data, existing);
   saveStore(data);
   res.json({ userId: user.id });
+});
+
+app.post('/api/eula/accept', (req, res) => {
+  const data = loadStore();
+  const userId = req.headers['x-user-id'];
+  const user = getOrCreateUser(data, userId);
+  user.eulaAcceptedAt = Date.now();
+  saveStore(data);
+  res.json({ ok: true, eulaAcceptedAt: user.eulaAcceptedAt });
 });
 
 app.get('/api/me', (req, res) => {
@@ -113,6 +164,8 @@ app.get('/api/me', (req, res) => {
     resonance: getResonance(user),
     trustScore: user.trustScore,
     suspendedUntil: user.suspendedUntil,
+    banned: isBanned(user),
+    eulaAccepted: !!user.eulaAcceptedAt,
     dailyCompleted: day.completed,
     dailyLimit: dailyLimit(user),
     canStart: quota.ok,
@@ -125,6 +178,8 @@ app.post('/api/queue/join', (req, res) => {
   const data = loadStore();
   const userId = req.headers['x-user-id'];
   const user = getOrCreateUser(data, userId);
+  if (!requireEula(user, res)) return;
+
   const { intention, content } = req.body;
 
   if (!intention || !content) {
@@ -132,6 +187,19 @@ app.post('/api/queue/join', (req, res) => {
   }
   if (content.length < 100 || content.length > 1500) {
     return res.status(400).json({ error: 'invalid_length', min: 100, max: 1500 });
+  }
+
+  const filtered = filterSecretContent(content);
+  if (!filtered.ok) {
+    if (filtered.severity === 'severe') {
+      suspendUserOnFilter(user, filtered);
+      saveStore(data);
+    }
+    return res.status(400).json({
+      error: 'content_blocked',
+      code: filtered.code,
+      message: filtered.message,
+    });
   }
 
   const quota = canStartSwap(user);
@@ -165,6 +233,17 @@ app.post('/api/queue/join', (req, res) => {
   res.json({ status: 'matched', swapId: swap.id });
 });
 
+function suspendUserOnFilter(user, filtered) {
+  user.filterViolations = (user.filterViolations || 0) + 1;
+  if (filtered.severity === 'severe' || user.filterViolations >= 3) {
+    user.banned = true;
+    user.bannedAt = Date.now();
+    user.banReason = 'filter_severe';
+  } else {
+    user.suspendedUntil = Date.now() + 24 * 60 * 60 * 1000;
+  }
+}
+
 function finishQueueStatus(data, userId, res) {
   runBotIfStale(data, userId);
   const active = activeSwapForUser(data, userId);
@@ -196,6 +275,10 @@ app.delete('/api/queue/leave', (req, res) => {
 app.get('/api/swaps/:id', (req, res) => {
   const data = loadStore();
   const userId = req.headers['x-user-id'];
+  const user = data.users[userId];
+  if (!user) return res.status(401).json({ error: 'unknown_user' });
+  if (!requireEula(user, res)) return;
+
   const swap = data.swaps[req.params.id];
   if (!swap) return res.status(404).json({ error: 'not_found' });
   if (swap.userA !== userId && swap.userB !== userId) {
@@ -207,6 +290,9 @@ app.get('/api/swaps/:id', (req, res) => {
 app.post('/api/swaps/:id/lock', (req, res) => {
   const data = loadStore();
   const userId = req.headers['x-user-id'];
+  const user = data.users[userId];
+  if (!user || !requireEula(user, res)) return;
+
   const swap = data.swaps[req.params.id];
   if (!swap) return res.status(404).json({ error: 'not_found' });
   const isA = swap.userA === userId;
@@ -217,16 +303,92 @@ app.post('/api/swaps/:id/lock', (req, res) => {
 
   if (swap.lockA && swap.lockB) {
     swap.status = 'opened';
-    if (swap.isBot) swap.status = 'opened';
   }
 
   saveStore(data);
   res.json(swapViewForUser(swap, userId, data));
 });
 
+app.post('/api/swaps/:id/hide', (req, res) => {
+  const data = loadStore();
+  const userId = req.headers['x-user-id'];
+  const user = data.users[userId];
+  if (!user || !requireEula(user, res)) return;
+
+  const swap = data.swaps[req.params.id];
+  if (!swap) return res.status(404).json({ error: 'not_found' });
+  if (swap.userA !== userId && swap.userB !== userId) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  hideSwapForUser(swap, userId);
+  redactPeerContent(swap, userId);
+  completeSwapForUser(data, swap, userId);
+  saveStore(data);
+
+  res.json({
+    ok: true,
+    hidden: true,
+    ...swapViewForUser(swap, userId, data),
+  });
+});
+
+app.post('/api/swaps/:id/report', (req, res) => {
+  const data = loadStore();
+  const userId = req.headers['x-user-id'];
+  const user = data.users[userId];
+  if (!user || !requireEula(user, res)) return;
+
+  const swap = data.swaps[req.params.id];
+  if (!swap) return res.status(404).json({ error: 'not_found' });
+  if (swap.userA !== userId && swap.userB !== userId) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  const isA = swap.userA === userId;
+  if (isA) swap.ratingByA = 'report';
+  else swap.ratingByB = 'report';
+
+  const peerId = reportedUserId(swap, userId);
+  const contentSnapshot = reportedContentSnapshot(swap, userId);
+
+  hideSwapForUser(swap, userId);
+  redactPeerContent(swap, userId);
+
+  const report = createReport(data, {
+    swapId: swap.id,
+    reporterId: userId,
+    reportedUserId: peerId,
+    contentSnapshot,
+    reason: req.body?.reason || 'user_report',
+  });
+
+  let peerAction = null;
+  const peer = peerId !== 'bot' ? data.users[peerId] : null;
+  if (peer) {
+    peerAction = applyReportPenalty(peer, { severe: false });
+  }
+
+  completeSwapForUser(data, swap, userId);
+  saveStore(data);
+
+  res.json({
+    ok: true,
+    hidden: true,
+    reportId: report.id,
+    peerAction,
+    message: 'report_submitted',
+    peerContent: null,
+    phase: 'hidden',
+  });
+});
+
 app.post('/api/swaps/:id/feedback', (req, res) => {
   const data = loadStore();
   const userId = req.headers['x-user-id'];
+  const user = data.users[userId];
+  if (!user || !requireEula(user, res)) return;
+
   const { type } = req.body;
   const swap = data.swaps[req.params.id];
   if (!swap) return res.status(404).json({ error: 'not_found' });
@@ -234,8 +396,11 @@ app.post('/api/swaps/:id/feedback', (req, res) => {
   const isA = swap.userA === userId;
   if (!isA && swap.userB !== userId) return res.status(403).json({ error: 'forbidden' });
 
+  if (type === 'report') {
+    return res.status(400).json({ error: 'use_report_endpoint', hint: 'POST /api/swaps/:id/report' });
+  }
+
   const peerId = isA ? swap.userB : swap.userA;
-  const user = data.users[userId];
   const peer = peerId !== 'bot' ? data.users[peerId] : null;
 
   if (isA) swap.ratingByA = type;
@@ -252,9 +417,6 @@ app.post('/api/swaps/:id/feedback', (req, res) => {
     if (type === 'dishonest' && peer.reportsReceived >= 3) {
       peer.suspendedUntil = Date.now() + 24 * 60 * 60 * 1000;
     }
-    if (type === 'report') {
-      peer.suspendedUntil = Date.now() + 7 * 24 * 60 * 60 * 1000;
-    }
   }
 
   const myRatingFromPeer = isA ? swap.ratingByB : swap.ratingByA;
@@ -264,12 +426,7 @@ app.post('/api/swaps/:id/feedback', (req, res) => {
     myResult = applyEnvelopeRating(user, myRatingFromPeer);
   }
 
-  if (!user.daily[todayKey()]) user.daily[todayKey()] = { completed: 0 };
-  user.daily[todayKey()].completed += 1;
-  if (!user.firstCompletedAt) user.firstCompletedAt = Date.now();
-  user.completedSwaps += 1;
-  swap.status = 'completed';
-
+  completeSwapForUser(data, swap, userId);
   saveStore(data);
   res.json({
     ok: true,
@@ -285,16 +442,13 @@ app.post('/api/swaps/:id/feedback', (req, res) => {
 app.post('/api/swaps/:id/complete', (req, res) => {
   const data = loadStore();
   const userId = req.headers['x-user-id'];
+  const user = data.users[userId];
+  if (!user || !requireEula(user, res)) return;
+
   const swap = data.swaps[req.params.id];
   if (!swap) return res.status(404).json({ error: 'not_found' });
 
-  const user = data.users[userId];
-  if (!user.daily[todayKey()]) user.daily[todayKey()] = { completed: 0 };
-  if (swap.status !== 'completed') {
-    user.daily[todayKey()].completed += 1;
-    if (!user.firstCompletedAt) user.firstCompletedAt = Date.now();
-    swap.status = 'completed';
-  }
+  completeSwapForUser(data, swap, userId);
   saveStore(data);
   res.json({ ok: true });
 });

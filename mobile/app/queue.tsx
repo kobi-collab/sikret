@@ -7,6 +7,7 @@ import { Screen } from '../src/components/Screen';
 import { OutlineButton, Subtitle, Title } from '../src/components/UI';
 import { copy } from '../src/copy';
 import { useApp } from '../src/context/AppContext';
+import { routes } from '../src/routes';
 import { colors } from '../src/theme';
 
 async function goToSwapIfReady(userId: string): Promise<string | null> {
@@ -75,14 +76,19 @@ export default function QueueScreen() {
           }
         }
 
-        Alert.alert(
-          'שגיאה',
-          err.code === 'quota'
-            ? 'הגעת למכסה היומית'
-            : err.code === 'network_error'
-              ? 'אין חיבור לשרת'
-              : 'לא הצלחנו להיכנס לתור',
-        );
+        if (err.code === 'quota') {
+          Alert.alert('שגיאה', 'הגעת למכסה היומית');
+        } else if (err.code === 'content_blocked') {
+          const msg = (err as Error & { data?: { message?: string } }).data?.message;
+          Alert.alert('לא ניתן לשלוח', msg || 'התוכן אינו עומד בכללי הקהילה.');
+        } else if (err.code === 'eula_required') {
+          Alert.alert('נדרש אישור', 'יש לאשר את תנאי השימוש לפני שליחה.');
+          router.replace(routes.terms);
+        } else if (err.code === 'network_error') {
+          Alert.alert('שגיאה', 'אין חיבור לשרת');
+        } else {
+          Alert.alert('שגיאה', 'לא הצלחנו להיכנס לתור');
+        }
         router.back();
       }
     })();

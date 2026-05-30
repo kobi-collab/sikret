@@ -1,11 +1,18 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { Animated, ColorValue, Easing, StyleSheet, View } from 'react-native';
 import { colors } from '../theme';
 
 type Mode = 'idle' | 'queue' | 'locked' | 'open';
 
 type Props = { mode?: Mode; size?: number };
+
+function ringGradientColors(mode: Mode): readonly [ColorValue, ColorValue, ...ColorValue[]] {
+  if (mode === 'locked') {
+    return [colors.locked, colors.neonMagenta, colors.locked];
+  }
+  return [colors.neonCyan, colors.neonPurple, colors.neonMagenta, colors.neonCyan];
+}
 
 export function EnvelopeOrb({ mode = 'idle', size = 140 }: Props) {
   const spin = useRef(new Animated.Value(0)).current;
@@ -46,10 +53,7 @@ export function EnvelopeOrb({ mode = 'idle', size = 140 }: Props) {
     outputRange: [1, 1.15],
   });
 
-  const ringColors =
-    mode === 'locked'
-      ? [colors.locked, colors.neonMagenta, colors.locked]
-      : [colors.neonCyan, colors.neonPurple, colors.neonMagenta, colors.neonCyan];
+  const ringColors = ringGradientColors(mode);
 
   return (
     <Animated.View style={{ transform: [{ rotate }, { scale }], marginVertical: 24 }}>

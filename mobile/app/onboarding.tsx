@@ -6,7 +6,8 @@ import { Screen } from '../src/components/Screen';
 import { GlassCard, PrimaryButton, Subtitle, Title } from '../src/components/UI';
 import { copy } from '../src/copy';
 import { useApp } from '../src/context/AppContext';
-import { colors, spacing } from '../src/theme';
+import { routes } from '../src/routes';
+import { colors } from '../src/theme';
 
 const SLIDES = [
   {
@@ -32,7 +33,7 @@ export default function OnboardingScreen() {
   const next = async () => {
     if (last) {
       await finishOnboarding();
-      router.replace('/');
+      router.replace(routes.terms);
       return;
     }
     setStep((s) => s + 1);

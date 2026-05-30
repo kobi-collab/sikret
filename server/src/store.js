@@ -10,6 +10,7 @@ const defaultData = () => ({
   users: {},
   queue: [],
   swaps: {},
+  reports: {},
 });
 
 export function loadStore() {
