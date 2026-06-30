@@ -151,8 +151,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!ready || !userId) return;
 
-    const onAppState = (state: AppStateStatus) => {
-      if (state === 'active') refreshMe();
+    const onAppState = async (state: AppStateStatus) => {
+      if (state === 'active') {
+        const stored = await getUserId();
+        if (stored) setUid(stored);
+        refreshMe();
+      }
     };
 
     const sub = RNAppState.addEventListener('change', onAppState);

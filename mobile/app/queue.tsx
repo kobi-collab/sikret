@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { Alert, StyleSheet, Text } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { api, waitForApi } from '../src/api';
 import { EnvelopeOrb } from '../src/components/EnvelopeOrb';
 import { Screen } from '../src/components/Screen';
@@ -22,14 +23,24 @@ async function goToSwapIfReady(userId: string): Promise<string | null> {
 
 export default function QueueScreen() {
   const { ready, userId, draft, refreshMe, clearDraft, retryServerSync } = useApp();
-  const { blocked } = useFlowGuard({ requireQuota: true });
+  const { blocked, pending } = useFlowGuard({ requireQuota: true });
   const [status, setStatus] = useState<'joining' | 'queued' | 'error' | 'idle'>('joining');
   const [hint, setHint] = useState(copy.queueJoining);
-  const joined = useRef(false);
+  const joining = useRef(false);
   const idleTicks = useRef(0);
+  const draftKey = `${draft.intention ?? ''}:${draft.content?.length ?? 0}`;
+
+  useFocusEffect(
+    useCallback(() => {
+      joining.current = false;
+      idleTicks.current = 0;
+      setStatus('joining');
+      setHint(copy.queueJoining);
+    }, []),
+  );
 
   useEffect(() => {
-    if (!ready || blocked) return;
+    if (!ready || blocked || pending) return;
     if (!userId) {
       const t = setTimeout(() => {
         Alert.alert(copy.networkError, copy.serverWaking, [
@@ -43,11 +54,11 @@ export default function QueueScreen() {
       Alert.alert('שגיאה', 'חסרים פרטים לשליחה.', [{ text: 'אישור', onPress: () => router.back() }]);
       return;
     }
-    if (joined.current) return;
-    joined.current = true;
+    if (joining.current) return;
+    joining.current = true;
 
     const joinTimeout = setTimeout(() => {
-      joined.current = false;
+      joining.current = false;
       Alert.alert(copy.networkError, copy.serverWaking, [
         { text: copy.retry, onPress: () => router.replace(routes.queue) },
         { text: 'חזרה', onPress: () => router.back() },
@@ -59,7 +70,7 @@ export default function QueueScreen() {
       const ok = await waitForApi();
       if (!ok) {
         clearTimeout(joinTimeout);
-        joined.current = false;
+        joining.current = false;
         setStatus('error');
         Alert.alert(copy.networkError, '', [{ text: 'חזרה', onPress: () => router.back() }]);
         return;
@@ -81,7 +92,7 @@ export default function QueueScreen() {
         setHint(copy.queueWaiting);
       } catch (e: unknown) {
         clearTimeout(joinTimeout);
-        joined.current = false;
+        joining.current = false;
         const err = e as Error & { code?: string; data?: { message?: string; accountAction?: string } };
         setStatus('error');
 
@@ -116,8 +127,11 @@ export default function QueueScreen() {
       }
     })();
 
-    return () => clearTimeout(joinTimeout);
-  }, [ready, blocked, userId, draft, clearDraft, retryServerSync]);
+    return () => {
+      clearTimeout(joinTimeout);
+      joining.current = false;
+    };
+  }, [ready, blocked, pending, userId, draftKey, draft, clearDraft, retryServerSync]);
 
   useEffect(() => {
     if (status !== 'queued' || !userId) return;
@@ -153,7 +167,7 @@ export default function QueueScreen() {
   }, [status, userId, refreshMe, clearDraft]);
 
   const leave = async () => {
-    joined.current = false;
+    joining.current = false;
     if (userId) {
       try {
         await api.leaveQueue(userId);
@@ -163,6 +177,15 @@ export default function QueueScreen() {
     }
     router.back();
   };
+
+  if (pending) {
+    return (
+      <Screen>
+        <ActivityIndicator color={colors.neonCyan} size="large" />
+        <Text style={styles.hint}>{copy.loadingProfile}</Text>
+      </Screen>
+    );
+  }
 
   if (status === 'error') {
     return (
