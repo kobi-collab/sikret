@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { EnvelopeOrb } from '../src/components/EnvelopeOrb';
 import { Screen } from '../src/components/Screen';
 import { GlassCard, PrimaryButton, Subtitle, Title } from '../src/components/UI';
@@ -11,20 +11,12 @@ import { MIN_CHARS } from '../src/constants';
 import { routes } from '../src/routes';
 import { colors, spacing } from '../src/theme';
 import { hebrewText } from '../src/typography';
+import { getUserId } from '../src/storage';
 
 export default function SendScreen() {
   const { draft, refreshMe, retryServerSync } = useApp();
-  const { blocked, pending } = useFlowGuard({ requireQuota: true });
+  const { blocked } = useFlowGuard({ requireQuota: true });
   const [sending, setSending] = useState(false);
-
-  if (pending) {
-    return (
-      <Screen>
-        <ActivityIndicator color={colors.neonCyan} size="large" />
-        <Subtitle>{copy.loadingProfile}</Subtitle>
-      </Screen>
-    );
-  }
 
   if (blocked) return null;
 
@@ -43,7 +35,8 @@ export default function SendScreen() {
         await retryServerSync();
         profile = await refreshMe();
       }
-      if (!profile) {
+      const uid = profile ? (await getUserId()) : null;
+      if (!profile || !uid) {
         Alert.alert(copy.networkError, copy.serverWaking, [
           { text: copy.retry, onPress: () => send() },
         ]);

@@ -12,6 +12,7 @@ import { useFlowGuard } from '../src/hooks/useFlowGuard';
 import { routes } from '../src/routes';
 import { colors } from '../src/theme';
 import { MIN_CHARS } from '../src/constants';
+import { getUserId } from '../src/storage';
 
 async function goToSwapIfReady(userId: string): Promise<string | null> {
   const s = await api.queueStatus(userId);
@@ -23,65 +24,69 @@ async function goToSwapIfReady(userId: string): Promise<string | null> {
 
 export default function QueueScreen() {
   const { ready, userId, draft, refreshMe, clearDraft, retryServerSync } = useApp();
-  const { blocked, pending } = useFlowGuard({ requireQuota: true });
+  const { blocked } = useFlowGuard({ requireQuota: true });
   const [status, setStatus] = useState<'joining' | 'queued' | 'error' | 'idle'>('joining');
   const [hint, setHint] = useState(copy.queueJoining);
-  const joining = useRef(false);
+  const [joinAttempt, setJoinAttempt] = useState(1);
   const idleTicks = useRef(0);
-  const draftKey = `${draft.intention ?? ''}:${draft.content?.length ?? 0}`;
+  const hadFocus = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
-      joining.current = false;
       idleTicks.current = 0;
       setStatus('joining');
       setHint(copy.queueJoining);
+      if (hadFocus.current) {
+        setJoinAttempt((n) => n + 1);
+      } else {
+        hadFocus.current = true;
+      }
     }, []),
   );
 
   useEffect(() => {
-    if (!ready || blocked || pending) return;
-    if (!userId) {
-      const t = setTimeout(() => {
-        Alert.alert(copy.networkError, copy.serverWaking, [
-          { text: copy.retry, onPress: () => retryServerSync() },
-          { text: 'חזרה', onPress: () => router.back() },
-        ]);
-      }, 8000);
-      return () => clearTimeout(t);
-    }
-    if (!draft.intention || !draft.content || draft.content.length < MIN_CHARS) {
-      Alert.alert('שגיאה', 'חסרים פרטים לשליחה.', [{ text: 'אישור', onPress: () => router.back() }]);
-      return;
-    }
-    if (joining.current) return;
-    joining.current = true;
+    if (!ready || blocked) return;
 
-    const joinTimeout = setTimeout(() => {
-      joining.current = false;
-      Alert.alert(copy.networkError, copy.serverWaking, [
-        { text: copy.retry, onPress: () => router.replace(routes.queue) },
-        { text: 'חזרה', onPress: () => router.back() },
-      ]);
-    }, 60000);
+    let cancelled = false;
 
     (async () => {
+      let uid = userId ?? (await getUserId());
+      if (!uid) {
+        await retryServerSync();
+        uid = userId ?? (await getUserId());
+      }
+      if (!uid || cancelled) {
+        if (!cancelled) {
+          setStatus('error');
+          Alert.alert(copy.networkError, copy.serverWaking, [
+            { text: copy.retry, onPress: () => setJoinAttempt((n) => n + 1) },
+            { text: 'חזרה', onPress: () => router.back() },
+          ]);
+        }
+        return;
+      }
+
+      if (!draft.intention || !draft.content || draft.content.length < MIN_CHARS) {
+        Alert.alert('שגיאה', 'חסרים פרטים לשליחה.', [{ text: 'אישור', onPress: () => router.back() }]);
+        return;
+      }
+
       setHint(copy.queueWaking);
       const ok = await waitForApi();
-      if (!ok) {
-        clearTimeout(joinTimeout);
-        joining.current = false;
-        setStatus('error');
-        Alert.alert(copy.networkError, '', [{ text: 'חזרה', onPress: () => router.back() }]);
+      if (!ok || cancelled) {
+        if (!cancelled) {
+          setStatus('error');
+          Alert.alert(copy.networkError, '', [{ text: 'חזרה', onPress: () => router.back() }]);
+        }
         return;
       }
 
       try {
-        const res = await api.joinQueue(userId, {
+        const res = await api.joinQueue(uid, {
           intention: draft.intention!,
           content: draft.content!,
         });
-        clearTimeout(joinTimeout);
+        if (cancelled) return;
 
         if (res.status === 'matched' && res.swapId) {
           await clearDraft();
@@ -91,13 +96,12 @@ export default function QueueScreen() {
         setStatus('queued');
         setHint(copy.queueWaiting);
       } catch (e: unknown) {
-        clearTimeout(joinTimeout);
-        joining.current = false;
+        if (cancelled) return;
         const err = e as Error & { code?: string; data?: { message?: string; accountAction?: string } };
         setStatus('error');
 
         if (err.code === 'active_swap') {
-          const me = await api.me(userId);
+          const me = await api.me(uid);
           if (me.activeSwapId) {
             router.replace({ pathname: '/swap', params: { id: me.activeSwapId } });
             return;
@@ -128,17 +132,18 @@ export default function QueueScreen() {
     })();
 
     return () => {
-      clearTimeout(joinTimeout);
-      joining.current = false;
+      cancelled = true;
     };
-  }, [ready, blocked, pending, userId, draftKey, draft, clearDraft, retryServerSync]);
+  }, [ready, blocked, userId, joinAttempt, draft.intention, draft.content, clearDraft, retryServerSync]);
 
   useEffect(() => {
-    if (status !== 'queued' || !userId) return;
+    if (status !== 'queued') return;
 
     const poll = async () => {
       try {
-        const swapId = await goToSwapIfReady(userId);
+        const uid = userId ?? (await getUserId());
+        if (!uid) return;
+        const swapId = await goToSwapIfReady(uid);
         if (swapId) {
           idleTicks.current = 0;
           await refreshMe();
@@ -146,7 +151,7 @@ export default function QueueScreen() {
           router.replace({ pathname: '/swap', params: { id: swapId } });
           return;
         }
-        const st = await api.queueStatus(userId);
+        const st = await api.queueStatus(uid);
         if (st.status === 'idle') {
           idleTicks.current += 1;
           if (idleTicks.current >= 30) {
@@ -167,10 +172,10 @@ export default function QueueScreen() {
   }, [status, userId, refreshMe, clearDraft]);
 
   const leave = async () => {
-    joining.current = false;
-    if (userId) {
+    const uid = userId ?? (await getUserId());
+    if (uid) {
       try {
-        await api.leaveQueue(userId);
+        await api.leaveQueue(uid);
       } catch {
         /* leave anyway */
       }
@@ -178,7 +183,7 @@ export default function QueueScreen() {
     router.back();
   };
 
-  if (pending) {
+  if (!ready) {
     return (
       <Screen>
         <ActivityIndicator color={colors.neonCyan} size="large" />
@@ -191,7 +196,7 @@ export default function QueueScreen() {
     return (
       <Screen>
         <Title>{copy.networkError}</Title>
-        <OutlineButton label={copy.retry} onPress={() => router.replace(routes.queue)} />
+        <OutlineButton label={copy.retry} onPress={() => setJoinAttempt((n) => n + 1)} />
         <OutlineButton label={copy.leaveQueue} onPress={leave} />
       </Screen>
     );

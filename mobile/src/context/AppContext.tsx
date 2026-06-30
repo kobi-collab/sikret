@@ -99,6 +99,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [userId]);
 
   const runServerSync = useCallback(async () => {
+    setMeLoading(true);
+    setMeError(false);
     try {
       const storedId = await getUserId();
       const synced = await syncUserFromServer(storedId);
@@ -108,13 +110,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       setUid(synced.userId);
       setMe(synced.me);
-      setMeError(false);
       if (synced.me.eulaAccepted) {
         setEula(true);
         await setEulaAcceptedLocal();
       }
     } catch {
       setMeError(true);
+    } finally {
+      setMeLoading(false);
     }
   }, []);
 
