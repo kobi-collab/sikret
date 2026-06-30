@@ -8,7 +8,7 @@ function adminAuth(req, res, next) {
   if (!secret) {
     return res.status(503).json({ error: 'admin_not_configured', hint: 'Set ADMIN_SECRET env var' });
   }
-  const provided = req.headers['x-admin-secret'] || req.query.secret;
+  const provided = req.headers['x-admin-secret'];
   if (provided !== secret) {
     return res.status(401).json({ error: 'unauthorized' });
   }
@@ -40,7 +40,7 @@ export function createAdminRouter() {
     swap.contentRemoved = true;
     swap.contentA = '[removed by moderation]';
     swap.contentB = '[removed by moderation]';
-    swap.status = 'completed';
+    swap.status = 'removed';
     swap.removedAt = Date.now();
     saveStore(data);
     res.json({ ok: true, swapId: swap.id });

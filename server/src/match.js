@@ -11,7 +11,7 @@ export function pickBotResponse() {
   return BOT_RESPONSES[Math.floor(Math.random() * BOT_RESPONSES.length)];
 }
 
-export function tryMatch(data) {
+export function tryMatch(data, activeSwapForUser) {
   const waiting = data.queue.filter((q) => !q.matched);
   let bestPair = null;
   let bestDiff = Infinity;
@@ -21,6 +21,7 @@ export function tryMatch(data) {
       const a = waiting[i];
       const b = waiting[j];
       if (a.intention !== b.intention || a.userId === b.userId) continue;
+      if (activeSwapForUser?.(data, a.userId) || activeSwapForUser?.(data, b.userId)) continue;
 
       const resA = getResonance(data.users[a.userId]);
       const resB = getResonance(data.users[b.userId]);
@@ -76,7 +77,7 @@ export function createBotSwap(data, entry) {
     contentB: pickBotResponse(),
     isBot: true,
     ratingByA: null,
-    ratingByB: 'touched',
+    ratingByB: null,
   };
   data.swaps[swapId] = swap;
   data.queue = data.queue.filter((q) => q.id !== entry.id);

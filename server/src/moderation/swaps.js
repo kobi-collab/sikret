@@ -5,7 +5,6 @@ export function hideSwapForUser(swap, userId) {
   if (isA) swap.hiddenForA = true;
   else swap.hiddenForB = true;
   swap.hiddenAt = swap.hiddenAt || Date.now();
-  if (swap.status !== 'completed') swap.status = 'completed';
   return true;
 }
 
@@ -13,6 +12,15 @@ export function redactPeerContent(swap, userId) {
   const isA = swap.userA === userId;
   if (isA) swap.contentB = null;
   else swap.contentA = null;
+}
+
+/** Full redaction after moderation report — both parties */
+export function redactAllSwapContent(swap) {
+  swap.contentRemoved = true;
+  swap.contentA = null;
+  swap.contentB = null;
+  swap.hiddenForA = true;
+  swap.hiddenForB = true;
 }
 
 export function peerContentForUser(swap, userId) {

@@ -1,14 +1,16 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text } from 'react-native';
-import { api, getApiHost, pingApi } from '../src/api';
+import { api, waitForApi } from '../src/api';
 import { EnvelopeOrb } from '../src/components/EnvelopeOrb';
 import { Screen } from '../src/components/Screen';
 import { OutlineButton, Subtitle, Title } from '../src/components/UI';
 import { copy } from '../src/copy';
-import { useApp } from '../src/context/AppContext';
+import { resetDraftAfterSend, useApp } from '../src/context/AppContext';
+import { useFlowGuard } from '../src/hooks/useFlowGuard';
 import { routes } from '../src/routes';
 import { colors } from '../src/theme';
+import { MIN_CHARS } from '../src/constants';
 
 async function goToSwapIfReady(userId: string): Promise<string | null> {
   const s = await api.queueStatus(userId);
@@ -19,34 +21,47 @@ async function goToSwapIfReady(userId: string): Promise<string | null> {
 }
 
 export default function QueueScreen() {
-  const { userId, draft, refreshMe } = useApp();
-  const [status, setStatus] = useState<'joining' | 'queued' | 'error'>('joining');
+  const { ready, userId, draft, refreshMe, setDraft, retryServerSync } = useApp();
+  const { blocked } = useFlowGuard({ requireQuota: true });
+  const [status, setStatus] = useState<'joining' | 'queued' | 'error' | 'idle'>('joining');
   const [hint, setHint] = useState(copy.queueJoining);
   const joined = useRef(false);
+  const idleTicks = useRef(0);
 
   useEffect(() => {
-    if (!userId || joined.current) return;
+    if (!ready || blocked) return;
+    if (!userId) {
+      const t = setTimeout(() => {
+        Alert.alert(copy.networkError, copy.serverWaking, [
+          { text: copy.retry, onPress: () => retryServerSync() },
+          { text: 'חזרה', onPress: () => router.back() },
+        ]);
+      }, 8000);
+      return () => clearTimeout(t);
+    }
+    if (!draft.intention || !draft.content || draft.content.length < MIN_CHARS) {
+      Alert.alert('שגיאה', 'חסרים פרטים לשליחה.', [{ text: 'אישור', onPress: () => router.back() }]);
+      return;
+    }
+    if (joined.current) return;
     joined.current = true;
 
     const joinTimeout = setTimeout(() => {
-      Alert.alert(
-        'אין חיבור לשרת',
-        `השרת בענן עלול להתעורר לאט (עד דקה). נסה שוב.\n${getApiHost()}`,
-      );
-      router.back();
-    }, 45000);
+      joined.current = false;
+      Alert.alert(copy.networkError, copy.serverWaking, [
+        { text: copy.retry, onPress: () => router.replace(routes.queue) },
+        { text: 'חזרה', onPress: () => router.back() },
+      ]);
+    }, 60000);
 
     (async () => {
       setHint(copy.queueWaking);
-      let ok = await pingApi();
-      if (!ok) {
-        await new Promise((r) => setTimeout(r, 2500));
-        ok = await pingApi();
-      }
+      const ok = await waitForApi();
       if (!ok) {
         clearTimeout(joinTimeout);
-        Alert.alert('אין חיבור לשרת', `בדוק אינטרנט או נסה שוב בעוד רגע.\n${getApiHost()}`);
-        router.back();
+        joined.current = false;
+        setStatus('error');
+        Alert.alert(copy.networkError, '', [{ text: 'חזרה', onPress: () => router.back() }]);
         return;
       }
 
@@ -58,6 +73,7 @@ export default function QueueScreen() {
         clearTimeout(joinTimeout);
 
         if (res.status === 'matched' && res.swapId) {
+          await resetDraftAfterSend(setDraft);
           router.replace({ pathname: '/swap', params: { id: res.swapId } });
           return;
         }
@@ -65,7 +81,8 @@ export default function QueueScreen() {
         setHint(copy.queueWaiting);
       } catch (e: unknown) {
         clearTimeout(joinTimeout);
-        const err = e as Error & { code?: string };
+        joined.current = false;
+        const err = e as Error & { code?: string; data?: { message?: string; accountAction?: string } };
         setStatus('error');
 
         if (err.code === 'active_swap') {
@@ -75,17 +92,23 @@ export default function QueueScreen() {
             return;
           }
         }
-
+        if (err.code === 'suspended' || err.code === 'banned') {
+          router.replace(routes.suspended);
+          return;
+        }
         if (err.code === 'quota') {
-          Alert.alert('שגיאה', 'הגעת למכסה היומית');
+          Alert.alert('שגיאה', copy.quotaExhausted);
         } else if (err.code === 'content_blocked') {
-          const msg = (err as Error & { data?: { message?: string } }).data?.message;
+          const msg = err.data?.message;
+          if (err.data?.accountAction === 'banned' || err.data?.accountAction === 'suspended') {
+            router.replace(routes.suspended);
+            return;
+          }
           Alert.alert('לא ניתן לשלוח', msg || 'התוכן אינו עומד בכללי הקהילה.');
         } else if (err.code === 'eula_required') {
-          Alert.alert('נדרש אישור', 'יש לאשר את תנאי השימוש לפני שליחה.');
           router.replace(routes.terms);
         } else if (err.code === 'network_error') {
-          Alert.alert('שגיאה', 'אין חיבור לשרת');
+          Alert.alert('שגיאה', copy.networkError);
         } else {
           Alert.alert('שגיאה', 'לא הצלחנו להיכנס לתור');
         }
@@ -94,7 +117,7 @@ export default function QueueScreen() {
     })();
 
     return () => clearTimeout(joinTimeout);
-  }, [userId, draft]);
+  }, [ready, blocked, userId, draft, setDraft, retryServerSync]);
 
   useEffect(() => {
     if (status !== 'queued' || !userId) return;
@@ -103,8 +126,21 @@ export default function QueueScreen() {
       try {
         const swapId = await goToSwapIfReady(userId);
         if (swapId) {
+          idleTicks.current = 0;
           await refreshMe();
+          await resetDraftAfterSend(setDraft);
           router.replace({ pathname: '/swap', params: { id: swapId } });
+          return;
+        }
+        const st = await api.queueStatus(userId);
+        if (st.status === 'idle') {
+          idleTicks.current += 1;
+          if (idleTicks.current >= 30) {
+            setStatus('idle');
+            setHint(copy.networkError);
+          }
+        } else {
+          idleTicks.current = 0;
         }
       } catch {
         setHint(copy.queueWaiting);
@@ -114,12 +150,29 @@ export default function QueueScreen() {
     poll();
     const t = setInterval(poll, 1000);
     return () => clearInterval(t);
-  }, [status, userId, refreshMe]);
+  }, [status, userId, refreshMe, setDraft]);
 
   const leave = async () => {
-    if (userId) await api.leaveQueue(userId);
+    joined.current = false;
+    if (userId) {
+      try {
+        await api.leaveQueue(userId);
+      } catch {
+        /* leave anyway */
+      }
+    }
     router.back();
   };
+
+  if (status === 'error') {
+    return (
+      <Screen>
+        <Title>{copy.networkError}</Title>
+        <OutlineButton label={copy.retry} onPress={() => router.replace(routes.queue)} />
+        <OutlineButton label={copy.leaveQueue} onPress={leave} />
+      </Screen>
+    );
+  }
 
   return (
     <Screen>

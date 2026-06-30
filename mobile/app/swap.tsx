@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api, FeedbackResponse, SwapView } from '../src/api';
@@ -9,7 +9,9 @@ import { ResonanceRing } from '../src/components/ResonanceRing';
 import { Screen } from '../src/components/Screen';
 import { GlassCard, OutlineButton, PrimaryButton, Subtitle, Title } from '../src/components/UI';
 import { copy } from '../src/copy';
-import { useApp } from '../src/context/AppContext';
+import { resetDraftAfterSend, useApp } from '../src/context/AppContext';
+import { useFlowGuard } from '../src/hooks/useFlowGuard';
+import { routes } from '../src/routes';
 import { colors, spacing } from '../src/theme';
 import { hebrewText } from '../src/typography';
 
@@ -23,32 +25,49 @@ function feedbackLabel(type: string | null) {
 export default function SwapScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId, refreshMe, setDraft } = useApp();
+  useFlowGuard();
   const [swap, setSwap] = useState<SwapView | null>(null);
   const [reveal, setReveal] = useState<FeedbackResponse | null>(null);
   const [contentHidden, setContentHidden] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const poll = useCallback(async () => {
     if (!userId || !id || contentHidden) return;
-    const s = await api.getSwap(userId, id);
-    setSwap(s);
-    if (s.peerHidden || !s.peerContent) {
-      setContentHidden(true);
+    try {
+      const s = await api.getSwap(userId, id);
+      setSwap(s);
+      setLoadError(false);
+      if (s.peerHidden || !s.peerContent) {
+        setContentHidden(true);
+      }
+    } catch {
+      setLoadError(true);
     }
   }, [userId, id, contentHidden]);
 
   useFocusEffect(
     useCallback(() => {
+      if (!id) {
+        setLoadError(true);
+        return;
+      }
       poll();
       const t = setInterval(poll, 2500);
       return () => clearInterval(t);
-    }, [poll]),
+    }, [poll, id]),
   );
+
+  useEffect(() => {
+    if (!id) {
+      Alert.alert('שגיאה', copy.swapInvalid, [{ text: 'אישור', onPress: () => router.replace(routes.home) }]);
+    }
+  }, [id]);
 
   const finish = async () => {
     setReveal(null);
     await refreshMe();
-    setDraft({});
-    router.replace('/');
+    await resetDraftAfterSend(setDraft);
+    router.replace(routes.home);
   };
 
   const onFeedbackDone = (result: FeedbackResponse) => {
@@ -57,11 +76,15 @@ export default function SwapScreen() {
 
   const hideContent = async () => {
     if (!userId || !id) return;
-    await api.hideSwap(userId, id);
-    setContentHidden(true);
-    setSwap((prev) => (prev ? { ...prev, peerContent: null, peerHidden: true, phase: 'hidden' } : prev));
-    await refreshMe();
-    Alert.alert(copy.contentRemoved, '', [{ text: 'אישור', onPress: finish }]);
+    try {
+      await api.hideSwap(userId, id);
+      setContentHidden(true);
+      setSwap((prev) => (prev ? { ...prev, peerContent: null, peerHidden: true, phase: 'hidden' } : prev));
+      await refreshMe();
+      Alert.alert(copy.contentRemoved, '', [{ text: 'אישור', onPress: finish }]);
+    } catch {
+      Alert.alert('שגיאה', copy.networkError);
+    }
   };
 
   const report = () => {
@@ -91,9 +114,23 @@ export default function SwapScreen() {
 
   const feedback = async (type: 'touched' | 'dishonest') => {
     if (!userId || !id) return;
-    const result = await api.feedback(userId, id, type);
-    onFeedbackDone(result);
+    try {
+      const result = await api.feedback(userId, id, type);
+      onFeedbackDone(result);
+    } catch {
+      Alert.alert('שגיאה', copy.networkError);
+    }
   };
+
+  if (loadError && !swap) {
+    return (
+      <Screen>
+        <Title>{copy.swapError}</Title>
+        <OutlineButton label={copy.retry} onPress={poll} />
+        <OutlineButton label="חזרה לבית" onPress={() => router.replace(routes.home)} />
+      </Screen>
+    );
+  }
 
   if (!swap) {
     return (
@@ -120,7 +157,7 @@ export default function SwapScreen() {
       <Screen>
         <EnvelopeOrb mode="queue" />
         <Title>{copy.swapPreparing}</Title>
-        <Subtitle>רגע אחד</Subtitle>
+        <Subtitle>{swap.isBot ? copy.botHint : 'רגע אחד'}</Subtitle>
       </Screen>
     );
   }
@@ -151,7 +188,13 @@ export default function SwapScreen() {
       <OutlineButton
         label={copy.finishNoRate}
         onPress={async () => {
-          if (userId && id) await api.complete(userId, id);
+          if (!userId || !id) return;
+          try {
+            await api.complete(userId, id);
+          } catch {
+            Alert.alert('שגיאה', copy.networkError);
+            return;
+          }
           finish();
         }}
       />

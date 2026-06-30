@@ -1,4 +1,4 @@
-import { Linking, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '../src/components/Screen';
 import { GlassCard, OutlineButton, Subtitle, Title } from '../src/components/UI';
@@ -7,9 +7,22 @@ import { EULA_SECTIONS, SUPPORT_EMAIL } from '../src/terms';
 import { colors, spacing } from '../src/theme';
 import { routes } from '../src/routes';
 import { hebrewText } from '../src/typography';
+import { useApp } from '../src/context/AppContext';
 
 export default function SupportScreen() {
-  const mail = () => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('סיקרט — דיווח / תמיכה')}`);
+  const { eulaAccepted, me } = useApp();
+  const accepted = eulaAccepted || me?.eulaAccepted;
+
+  const mail = async () => {
+    const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('סיקרט — דיווח / תמיכה')}`;
+    try {
+      const ok = await Linking.canOpenURL(url);
+      if (!ok) throw new Error('no mail');
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('דוא״ל', copy.mailtoFailed);
+    }
+  };
 
   return (
     <Screen scroll={false}>
@@ -28,15 +41,17 @@ export default function SupportScreen() {
           <Text style={styles.body}>{copy.supportReportExplain}</Text>
         </GlassCard>
 
-        <GlassCard>
-          <Text style={styles.sectionTitle}>{copy.termsTitle}</Text>
-          {EULA_SECTIONS.slice(0, 3).map((s) => (
-            <Text key={s.title} style={styles.bullet}>
-              • {s.title}: {s.body.slice(0, 80)}…
-            </Text>
-          ))}
-          <OutlineButton label={copy.supportViewTerms} onPress={() => router.push(routes.terms)} />
-        </GlassCard>
+        {accepted && (
+          <GlassCard>
+            <Text style={styles.sectionTitle}>{copy.termsTitle}</Text>
+            {EULA_SECTIONS.map((s) => (
+              <Text key={s.title} style={styles.bullet}>
+                • {s.title}
+              </Text>
+            ))}
+            <OutlineButton label={copy.supportViewTerms} onPress={() => router.push(routes.terms)} />
+          </GlassCard>
+        )}
 
         <OutlineButton label={copy.supportBack} onPress={() => router.back()} />
       </ScrollView>

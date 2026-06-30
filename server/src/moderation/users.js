@@ -21,7 +21,7 @@ export function suspendUser(user, days, reason = 'moderation') {
   user.lastSuspendReason = reason;
 }
 
-/** Report → 7 day suspend; severe filter hit → 30 day suspend */
+/** Report → 7 day suspend; 5 reports → ban */
 export function applyReportPenalty(user, { severe = false } = {}) {
   user.reportsReceived = (user.reportsReceived || 0) + 1;
   if (severe || user.reportsReceived >= 5) {

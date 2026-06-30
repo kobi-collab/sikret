@@ -13,6 +13,7 @@ const BANNED_TERMS = [
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 const PHONE_RE = /(?:\+972|0)[\s-]?(?:5[0-9]|[2-9])\d{1}[\s-]?\d{3}[\s-]?\d{4,5}|\b\d{3}[-.\s]?\d{3,4}[-.\s]?\d{3,4}\b/;
 const URL_RE = /https?:\/\/[^\s]+|www\.[^\s]+/i;
+const USERNAME_RE = /@[a-zA-Z0-9_]{2,}/;
 
 function normalize(text) {
   return text
@@ -50,6 +51,13 @@ export function filterSecretContent(text) {
       ok: false,
       code: 'pii_url',
       message: 'אין לכלול קישורים בסוד.',
+    };
+  }
+  if (USERNAME_RE.test(raw)) {
+    return {
+      ok: false,
+      code: 'pii_username',
+      message: 'אין לכלול @username בסוד.',
     };
   }
 

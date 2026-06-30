@@ -6,4 +6,10 @@ export const routes = {
   terms: '/terms' as Href,
   support: '/support' as Href,
   onboarding: '/onboarding' as Href,
+  intention: '/intention' as Href,
+  compose: '/compose' as Href,
+  send: '/send' as Href,
+  queue: '/queue' as Href,
+  swap: '/swap' as Href,
+  suspended: '/suspended' as Href,
 } as const;

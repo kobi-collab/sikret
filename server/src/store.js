@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = process.env.DATA_DIR || path.join(__dirname, '..');
 const DATA_FILE = path.join(dataDir, 'data.json');
+const BACKUP_FILE = path.join(dataDir, 'data.json.bak');
 
 const defaultData = () => ({
   users: {},
@@ -16,19 +17,31 @@ const defaultData = () => ({
 export function loadStore() {
   try {
     if (fs.existsSync(DATA_FILE)) {
-      return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      const raw = fs.readFileSync(DATA_FILE, 'utf8');
+      return JSON.parse(raw);
     }
-  } catch {
-    /* fresh */
+  } catch (err) {
+    console.error('[store] corrupt data.json, backing up:', err.message);
+    try {
+      if (fs.existsSync(DATA_FILE)) {
+        fs.copyFileSync(DATA_FILE, `${BACKUP_FILE}.${Date.now()}`);
+      }
+    } catch {
+      /* ignore backup failure */
+    }
   }
   return defaultData();
 }
 
+/** Atomic write — temp file then rename */
 export function saveStore(data) {
   fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  const tmp = `${DATA_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, DATA_FILE);
 }
 
+/** Israel calendar day (Asia/Jerusalem) */
 export function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
 }

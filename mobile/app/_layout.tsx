@@ -7,20 +7,27 @@ import { routes } from '../src/routes';
 import { colors } from '../src/theme';
 
 I18nManager.allowRTL(true);
+if (!I18nManager.isRTL) {
+  I18nManager.forceRTL(true);
+}
 
 function RootNav() {
   const { ready, onboardingDone, eulaAccepted, me } = useApp();
 
   useEffect(() => {
     if (!ready) return;
+    if (me?.banned || (me?.suspendedUntil && me.suspendedUntil > Date.now())) {
+      router.replace(routes.suspended);
+      return;
+    }
     if (!onboardingDone) {
-      router.replace('/onboarding');
+      router.replace(routes.onboarding);
       return;
     }
     if (!eulaAccepted && !me?.eulaAccepted) {
       router.replace(routes.terms);
     }
-  }, [ready, onboardingDone, eulaAccepted, me?.eulaAccepted]);
+  }, [ready, onboardingDone, eulaAccepted, me?.eulaAccepted, me?.banned, me?.suspendedUntil]);
 
   if (!ready) {
     return (

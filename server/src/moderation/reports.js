@@ -5,8 +5,18 @@ export function ensureReportsStore(data) {
   if (!data.reports) data.reports = {};
 }
 
+export function findOpenReportForSwap(data, swapId, reporterId) {
+  ensureReportsStore(data);
+  return Object.values(data.reports).find(
+    (r) => r.status === 'open' && r.swapId === swapId && r.reporterId === reporterId,
+  );
+}
+
 export function createReport(data, payload) {
   ensureReportsStore(data);
+  const existing = findOpenReportForSwap(data, payload.swapId, payload.reporterId);
+  if (existing) return existing;
+
   const id = uuidv4();
   const report = {
     id,

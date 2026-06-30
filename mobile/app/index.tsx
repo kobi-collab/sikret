@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
-import { useCallback } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ResonanceRing } from '../src/components/ResonanceRing';
 import { Screen } from '../src/components/Screen';
@@ -11,8 +11,14 @@ import { colors, spacing } from '../src/theme';
 import { routes } from '../src/routes';
 import { hebrewText } from '../src/typography';
 
+function quotaMessage(me: NonNullable<ReturnType<typeof useApp>['me']>) {
+  if (me.quotaReason === 'quota' && me.dailyLimit === 2) return copy.quotaFirstDay;
+  if (me.quotaReason === 'quota') return copy.quotaExhausted;
+  return copy.quotaExhausted;
+}
+
 export default function HomeScreen() {
-  const { me, refreshMe, eulaAccepted } = useApp();
+  const { me, refreshMe, meLoading, meError, retryServerSync } = useApp();
 
   useFocusEffect(
     useCallback(() => {
@@ -20,31 +26,25 @@ export default function HomeScreen() {
     }, [refreshMe]),
   );
 
-  if (me?.banned) {
-    router.replace('/suspended');
-    return null;
-  }
-
-  if (me?.suspendedUntil && me.suspendedUntil > Date.now()) {
-    router.replace('/suspended');
-    return null;
-  }
-
-  if (!eulaAccepted && !me?.eulaAccepted) {
-    router.replace(routes.terms);
-    return null;
-  }
-
-  const remaining = (me?.dailyLimit ?? 3) - (me?.dailyCompleted ?? 0);
-  const canStart = me?.canStart ?? true;
+  const remaining = me ? me.dailyLimit - me.dailyCompleted : 0;
+  const canStart = me ? me.canStart : false;
 
   const start = () => {
     if (me?.activeSwapId) {
       router.push({ pathname: '/swap', params: { id: me.activeSwapId } });
       return;
     }
-    router.push('/intention');
+    router.push(routes.intention);
   };
+
+  if (meLoading && !me) {
+    return (
+      <Screen>
+        <ActivityIndicator color={colors.neonCyan} size="large" />
+        <Subtitle>{copy.loadingProfile}</Subtitle>
+      </Screen>
+    );
+  }
 
   return (
     <Screen scroll>
@@ -52,13 +52,19 @@ export default function HomeScreen() {
         <Text style={styles.logo}>{copy.appName}</Text>
         <Text style={styles.tagline}>{copy.tagline}</Text>
       </View>
+      {meError && (
+        <GlassCard>
+          <Text style={styles.err}>{copy.networkError}</Text>
+          <OutlineButton label={copy.retry} onPress={retryServerSync} />
+        </GlassCard>
+      )}
       <View style={styles.center}>
         <ResonanceRing resonance={me?.resonance ?? 3} size={100} label={copy.resonanceYours} />
       </View>
       <GlassCard>
         <Text style={styles.statLabel}>{copy.secretsToday}</Text>
         <Text style={styles.statValue}>
-          {me?.dailyCompleted ?? 0} / {me?.dailyLimit ?? 3}
+          {me?.dailyCompleted ?? 0} / {me?.dailyLimit ?? 2}
         </Text>
         <Text style={styles.statHint}>{copy.secretsLeft(Math.max(0, remaining))}</Text>
       </GlassCard>
@@ -66,12 +72,12 @@ export default function HomeScreen() {
       <PrimaryButton
         label={me?.activeSwapId ? copy.continueSecret : copy.newSecret}
         onPress={start}
-        disabled={!canStart && !me?.activeSwapId}
+        disabled={!me || (!canStart && !me.activeSwapId)}
       />
-      {!canStart && (
-        <Text style={styles.warn}>הגעת למכסה היומית. חוזר בחצות.</Text>
+      {me && !canStart && !me.activeSwapId && (
+        <Text style={styles.warn}>{quotaMessage(me)}</Text>
       )}
-      <OutlineButton label={copy.howItWorks} onPress={() => router.push('/onboarding')} />
+      <OutlineButton label={copy.howItWorks} onPress={() => router.replace(routes.onboarding)} />
       <OutlineButton label={copy.supportLink} onPress={() => router.push(routes.support)} />
     </Screen>
   );
@@ -105,5 +111,6 @@ const styles = StyleSheet.create({
     ...hebrewText,
   },
   statHint: { color: colors.textSecondary, fontSize: 14, alignSelf: 'stretch', ...hebrewText },
-  warn: { color: colors.warning, textAlign: 'center', marginTop: spacing.sm },
+  warn: { color: colors.warning, textAlign: 'center', marginTop: spacing.sm, ...hebrewText },
+  err: { color: colors.danger, marginBottom: spacing.sm, ...hebrewText },
 });

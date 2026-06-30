@@ -16,7 +16,12 @@ export function startBotWorker() {
 
     for (const entry of stale) {
       const stillThere = data.queue.find((q) => q.id === entry.id && !q.matched);
-      if (stillThere) {
+      const hasActive = Object.values(data.swaps).some(
+        (s) =>
+          (s.userA === stillThere?.userId || s.userB === stillThere?.userId) &&
+          !['completed', 'abandoned', 'removed'].includes(s.status),
+      );
+      if (stillThere && !hasActive) {
         createBotSwap(data, stillThere);
         console.log(`[bot] matched ${stillThere.id} for user ${stillThere.userId}`);
       }

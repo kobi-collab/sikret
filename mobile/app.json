@@ -23,6 +23,7 @@
     },
     "android": {
       "package": "com.sikret.app",
+      "supportsRTL": true,
       "adaptiveIcon": {
         "backgroundColor": "#05060F"
       }

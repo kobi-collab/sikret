@@ -1,6 +1,8 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
+const PRODUCTION_API_URL = 'https://sikret-api.onrender.com';
+
 function hostFromExpoLan(): string | null {
   const hostUri = Constants.expoConfig?.hostUri;
   if (hostUri) {
@@ -46,7 +48,7 @@ function resolveApiHost(): string {
     return `http://${lanHost}:3847`;
   }
 
-  if (Platform.OS === 'android') {
+  if (Platform.OS === 'android' && Constants.isDevice === false) {
     return 'http://10.0.2.2:3847';
   }
 
@@ -55,13 +57,22 @@ function resolveApiHost(): string {
     return 'http://127.0.0.1:3847';
   }
 
+  // Physical device release build without env — use production API
+  if (Constants.isDevice) {
+    return PRODUCTION_API_URL;
+  }
+
   return 'http://127.0.0.1:3847';
 }
 
 const host = resolveApiHost();
 
-export function getApiHost() {
+export function getApiHost(): string {
   return host;
+}
+
+function apiUrl(path: string) {
+  return `${getApiHost()}${path}`;
 }
 
 async function request<T>(
@@ -76,11 +87,11 @@ async function request<T>(
   if (userId) headers['x-user-id'] = userId;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), 20000);
 
   let res: Response;
   try {
-    res = await fetch(`${host}${path}`, { ...init, headers, signal: controller.signal });
+    res = await fetch(apiUrl(path), { ...init, headers, signal: controller.signal });
   } catch {
     clearTimeout(timeout);
     const err = new Error('network_error') as Error & { code?: string };
@@ -103,9 +114,9 @@ async function request<T>(
 
 export async function pingApi(): Promise<boolean> {
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), 5000);
+  const t = setTimeout(() => controller.abort(), 20000);
   try {
-    const res = await fetch(`${host}/health`, { signal: controller.signal });
+    const res = await fetch(apiUrl('/health'), { signal: controller.signal });
     const body = await res.json();
     return body?.ok === true;
   } catch {
@@ -113,6 +124,17 @@ export async function pingApi(): Promise<boolean> {
   } finally {
     clearTimeout(t);
   }
+}
+
+/** Wake Render / retry until API responds (cold start can take ~15s). */
+export async function waitForApi(maxAttempts = 4): Promise<boolean> {
+  for (let i = 0; i < maxAttempts; i++) {
+    if (await pingApi()) return true;
+    if (i < maxAttempts - 1) {
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+  return false;
 }
 
 export type MeResponse = {
@@ -195,9 +217,6 @@ export const api = {
 
   getSwap: (userId: string, swapId: string) =>
     request<SwapView>(`/api/swaps/${swapId}`, { userId }),
-
-  lockSwap: (userId: string, swapId: string) =>
-    request<SwapView>(`/api/swaps/${swapId}/lock`, { method: 'POST', userId }),
 
   feedback: (userId: string, swapId: string, type: 'touched' | 'dishonest') =>
     request<FeedbackResponse>(`/api/swaps/${swapId}/feedback`, {

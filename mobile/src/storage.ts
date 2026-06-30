@@ -7,6 +7,11 @@ const KEYS = {
   draft: 'sikret_draft',
 };
 
+export type Draft = {
+  intention?: string;
+  content?: string;
+};
+
 export async function getUserId(): Promise<string | null> {
   return AsyncStorage.getItem(KEYS.userId);
 }
@@ -29,4 +34,21 @@ export async function isEulaAcceptedLocal(): Promise<boolean> {
 
 export async function setEulaAcceptedLocal() {
   await AsyncStorage.setItem(KEYS.eula, '1');
+}
+
+export async function getDraft(): Promise<Draft> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.draft);
+    return raw ? (JSON.parse(raw) as Draft) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function saveDraft(draft: Draft) {
+  await AsyncStorage.setItem(KEYS.draft, JSON.stringify(draft));
+}
+
+export async function clearDraft() {
+  await AsyncStorage.removeItem(KEYS.draft);
 }

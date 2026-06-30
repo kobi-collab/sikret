@@ -1,20 +1,24 @@
 # פריסה ב-Render: https://render.com
-# New → Blueprint → חבר repo (אחרי push ל-GitHub)
-# חינם = שירות "נרדם" אחרי חוסר פעילות (~30 שניות התעוררות). ל-TestFlight זה בסדר להתחלה.
-# לחנות: שדרג ל-Starter ($7/חודש) — Always On
+# Starter + persistent disk — data survives redeploys
 
 services:
   - type: web
     name: sikret-api
     runtime: node
     region: frankfurt
-    plan: free
+    plan: starter
     rootDir: server
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health
+    disk:
+      name: sikret-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
+      - key: DATA_DIR
+        value: /var/data

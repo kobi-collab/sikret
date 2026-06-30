@@ -59,6 +59,29 @@ async function main() {
   });
   results.push(['2. server filter blocks email', filtered.status === 400 && filtered.data.error === 'content_blocked']);
 
+  // Two-user queue integrity (regression: queue wipe bug)
+  const regA = await req('/api/users', { method: 'POST', body: {} });
+  const regB = await req('/api/users', { method: 'POST', body: {} });
+  const uidA = regA.data.userId;
+  const uidB = regB.data.userId;
+  await req('/api/eula/accept', { method: 'POST', userId: uidA });
+  await req('/api/eula/accept', { method: 'POST', userId: uidB });
+  await req('/api/queue/join', {
+    method: 'POST',
+    userId: uidA,
+    body: { intention: 'confess', content: pad('h') },
+  });
+  const joinB = await req('/api/queue/join', {
+    method: 'POST',
+    userId: uidB,
+    body: { intention: 'confess', content: pad('i') },
+  });
+  const stA = await req('/api/queue/status', { userId: uidA });
+  results.push([
+    'queue: two users match (no wipe)',
+    joinB.data.status === 'matched' || stA.data.status === 'matched' || !!stA.data.swapId,
+  ]);
+
   // wait for bot match
   let swapId = null;
   for (let i = 0; i < 15; i++) {
