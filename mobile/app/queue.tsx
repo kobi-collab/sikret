@@ -6,7 +6,7 @@ import { EnvelopeOrb } from '../src/components/EnvelopeOrb';
 import { Screen } from '../src/components/Screen';
 import { OutlineButton, Subtitle, Title } from '../src/components/UI';
 import { copy } from '../src/copy';
-import { resetDraftAfterSend, useApp } from '../src/context/AppContext';
+import { useApp } from '../src/context/AppContext';
 import { useFlowGuard } from '../src/hooks/useFlowGuard';
 import { routes } from '../src/routes';
 import { colors } from '../src/theme';
@@ -21,7 +21,7 @@ async function goToSwapIfReady(userId: string): Promise<string | null> {
 }
 
 export default function QueueScreen() {
-  const { ready, userId, draft, refreshMe, setDraft, retryServerSync } = useApp();
+  const { ready, userId, draft, refreshMe, clearDraft, retryServerSync } = useApp();
   const { blocked } = useFlowGuard({ requireQuota: true });
   const [status, setStatus] = useState<'joining' | 'queued' | 'error' | 'idle'>('joining');
   const [hint, setHint] = useState(copy.queueJoining);
@@ -73,7 +73,7 @@ export default function QueueScreen() {
         clearTimeout(joinTimeout);
 
         if (res.status === 'matched' && res.swapId) {
-          await resetDraftAfterSend(setDraft);
+          await clearDraft();
           router.replace({ pathname: '/swap', params: { id: res.swapId } });
           return;
         }
@@ -117,7 +117,7 @@ export default function QueueScreen() {
     })();
 
     return () => clearTimeout(joinTimeout);
-  }, [ready, blocked, userId, draft, setDraft, retryServerSync]);
+  }, [ready, blocked, userId, draft, clearDraft, retryServerSync]);
 
   useEffect(() => {
     if (status !== 'queued' || !userId) return;
@@ -128,7 +128,7 @@ export default function QueueScreen() {
         if (swapId) {
           idleTicks.current = 0;
           await refreshMe();
-          await resetDraftAfterSend(setDraft);
+          await clearDraft();
           router.replace({ pathname: '/swap', params: { id: swapId } });
           return;
         }
@@ -150,7 +150,7 @@ export default function QueueScreen() {
     poll();
     const t = setInterval(poll, 1000);
     return () => clearInterval(t);
-  }, [status, userId, refreshMe, setDraft]);
+  }, [status, userId, refreshMe, clearDraft]);
 
   const leave = async () => {
     joined.current = false;

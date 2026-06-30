@@ -35,7 +35,7 @@ export function ResonanceRing({ resonance, size = 88, showLabel = true, label }:
           <Text style={styles.value}>{value.toFixed(1)}</Text>
         </View>
       </View>
-      {showLabel ? <Text style={styles.caption}>{label ?? 'תהודה'}</Text> : null}
+      {showLabel ? <Text style={styles.caption}>{label ?? 'סיקרט'}</Text> : null}
     </View>
   );
 }

@@ -18,7 +18,7 @@ function quotaMessage(me: NonNullable<ReturnType<typeof useApp>['me']>) {
 }
 
 export default function HomeScreen() {
-  const { me, refreshMe, meLoading, meError, retryServerSync } = useApp();
+  const { me, refreshMe, meLoading, meError, retryServerSync, clearDraft } = useApp();
 
   useFocusEffect(
     useCallback(() => {
@@ -27,13 +27,20 @@ export default function HomeScreen() {
   );
 
   const remaining = me ? me.dailyLimit - me.dailyCompleted : 0;
-  const canStart = me ? me.canStart : false;
+  const canStart = me ? me.canStart : true;
 
-  const start = () => {
-    if (me?.activeSwapId) {
-      router.push({ pathname: '/swap', params: { id: me.activeSwapId } });
+  const start = async () => {
+    let profile = me ?? (await refreshMe());
+    if (!profile) {
+      await retryServerSync();
+      profile = await refreshMe();
+      if (!profile) return;
+    }
+    if (profile.activeSwapId) {
+      router.push({ pathname: '/swap', params: { id: profile.activeSwapId } });
       return;
     }
+    await clearDraft();
     router.push(routes.intention);
   };
 
@@ -72,7 +79,7 @@ export default function HomeScreen() {
       <PrimaryButton
         label={me?.activeSwapId ? copy.continueSecret : copy.newSecret}
         onPress={start}
-        disabled={!me || (!canStart && !me.activeSwapId)}
+        disabled={meLoading || !!(me && !canStart && !me.activeSwapId)}
       />
       {me && !canStart && !me.activeSwapId && (
         <Text style={styles.warn}>{quotaMessage(me)}</Text>

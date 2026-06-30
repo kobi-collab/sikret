@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState as RNAppState, type AppStateStatus } from 'react-native';
 import { api, MeResponse, waitForApi } from '../api';
 import {
-  clearDraft,
+  clearDraft as clearDraftStorage,
   getDraft,
   getUserId,
   isEulaAcceptedLocal,
@@ -23,7 +24,8 @@ type AppState = {
   meLoading: boolean;
   meError: boolean;
   setDraft: (d: Draft) => void;
-  refreshMe: () => Promise<boolean>;
+  clearDraft: () => Promise<void>;
+  refreshMe: () => Promise<MeResponse | null>;
   finishOnboarding: () => Promise<void>;
   acceptEula: () => Promise<void>;
   retryServerSync: () => Promise<void>;
@@ -53,21 +55,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [meLoading, setMeLoading] = useState(false);
   const [meError, setMeError] = useState(false);
 
-  const refreshMe = useCallback(async () => {
-    if (!userId) return false;
+  const refreshMe = useCallback(async (): Promise<MeResponse | null> => {
+    let id = userId;
+    if (!id) {
+      id = await getUserId();
+      if (!id) return null;
+    }
     setMeLoading(true);
     setMeError(false);
     try {
-      const m = await api.me(userId);
+      const m = await api.me(id);
       setMe(m);
+      setUid(id);
       if (m.eulaAccepted) {
         setEula(true);
         await setEulaAcceptedLocal();
       }
-      return true;
-    } catch {
+      return m;
+    } catch (e) {
+      const err = e as Error & { code?: string };
+      if (err.code === 'unknown_user' || err.code === 'request_failed') {
+        try {
+          const synced = await syncUserFromServer(id);
+          if (synced) {
+            setUid(synced.userId);
+            setMe(synced.me);
+            setMeError(false);
+            if (synced.me.eulaAccepted) {
+              setEula(true);
+              await setEulaAcceptedLocal();
+            }
+            return synced.me;
+          }
+        } catch {
+          /* fall through */
+        }
+      }
       setMeError(true);
-      return false;
+      return null;
     } finally {
       setMeLoading(false);
     }
@@ -123,12 +148,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [runServerSync]);
 
+  useEffect(() => {
+    if (!ready || !userId) return;
+
+    const onAppState = (state: AppStateStatus) => {
+      if (state === 'active') refreshMe();
+    };
+
+    const sub = RNAppState.addEventListener('change', onAppState);
+    return () => sub.remove();
+  }, [ready, userId, refreshMe]);
+
   const setDraft = useCallback((d: Draft) => {
     setDraftState((prev) => {
       const next = { ...prev, ...d };
       saveDraft(next).catch(() => {});
       return next;
     });
+  }, []);
+
+  const clearDraft = useCallback(async () => {
+    await clearDraftStorage();
+    setDraftState({});
   }, []);
 
   const finishOnboarding = useCallback(async () => {
@@ -167,6 +208,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       meLoading,
       meError,
       setDraft,
+      clearDraft,
       refreshMe,
       finishOnboarding,
       acceptEula,
@@ -182,6 +224,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       meLoading,
       meError,
       setDraft,
+      clearDraft,
       refreshMe,
       finishOnboarding,
       acceptEula,
@@ -196,9 +239,4 @@ export function useApp() {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error('useApp outside provider');
   return ctx;
-}
-
-export async function resetDraftAfterSend(setDraft: (d: Draft) => void) {
-  await clearDraft();
-  setDraft({});
 }

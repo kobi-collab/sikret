@@ -2,9 +2,9 @@ export const copy = {
   appName: 'סיקרט',
   tagline: 'חיים בלי סודות.',
 
-  resonanceYours: 'התהודה שלך',
-  resonancePeer: 'תהודת הזר',
-  resonance: 'תהודה',
+  resonanceYours: 'הסיקרט שלך',
+  resonancePeer: 'הסיקרט של השולח',
+  resonance: 'סיקרט',
 
   secretsToday: 'סודות היום',
   secretsLeft: (n: number) => `נשארו ${n} סודות`,
@@ -20,7 +20,7 @@ export const copy = {
 
   composeTitle: 'הסוד שלך',
   composeHint:
-    'הזר יראה רק את הטקסט. אל תכלול שם, טלפון או @username. מינימום 100 תווים.',
+    'הזר יראה רק את הטקסט. אל תכלול שם, טלפון או @username. מינימום 25 תווים.',
   composePlaceholder: 'כתוב כאן מה שאתה רוצה לוודות...',
 
   sendTitle: 'שליחת הסוד',
@@ -46,9 +46,9 @@ export const copy = {
   finishNoRate: 'סיום בלי דירוג',
 
   revealTitle: 'משהו נחזר אליך',
-  revealResonance: (v: number, delta: string) => `התהודה שלך: ${v.toFixed(1)} (${delta})`,
+  revealResonance: (v: number, delta: string) => `הסיקרט שלך: ${v.toFixed(1)} (${delta})`,
   revealWaiting: 'מי שקרא את הסוד שלך — עדיין לא הגיב.',
-  revealPeer: (v: number) => `תהודת הזר כעת: ${v.toFixed(1)}`,
+  revealPeer: (v: number) => `הסיקרט של השולח: ${v.toFixed(1)}`,
   revealContinue: 'ממשיך',
 
   feedbackTouched: 'נגע בי',

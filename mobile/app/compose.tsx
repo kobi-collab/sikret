@@ -40,7 +40,7 @@ export default function ComposeScreen() {
         maxLength={MAX_CHARS}
       />
       <Text style={[styles.counter, len < MIN_CHARS && styles.counterWarn]}>
-        {len} / {MAX_CHARS}
+        {len} / {MAX_CHARS} · מינימום {MIN_CHARS}
       </Text>
       <PrimaryButton label="המשך" disabled={!valid} onPress={continueNext} />
     </Screen>

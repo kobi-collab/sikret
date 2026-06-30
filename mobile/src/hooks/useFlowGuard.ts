@@ -3,9 +3,11 @@ import { router } from 'expo-router';
 import { useApp } from '../context/AppContext';
 import { routes } from '../routes';
 
-/** Redirect if user cannot use core flows (EULA, ban, suspend). */
+/** Redirect if user cannot use core flows (EULA, ban, suspend, quota). */
 export function useFlowGuard(options?: { requireQuota?: boolean }) {
   const { ready, me, eulaAccepted, userId } = useApp();
+
+  const quotaBlocked = !!(options?.requireQuota && me && !me.canStart && !me.activeSwapId);
 
   useEffect(() => {
     if (!ready) return;
@@ -15,22 +17,24 @@ export function useFlowGuard(options?: { requireQuota?: boolean }) {
     }
     if (!eulaAccepted && !me?.eulaAccepted) {
       router.replace(routes.terms);
+      return;
     }
-  }, [ready, me, eulaAccepted]);
+    if (quotaBlocked) {
+      router.replace(routes.home);
+    }
+  }, [ready, me, eulaAccepted, quotaBlocked]);
 
   const blocked =
     !ready ||
     !userId ||
     me?.banned ||
     !!(me?.suspendedUntil && me.suspendedUntil > Date.now()) ||
-    (!eulaAccepted && !me?.eulaAccepted);
-
-  const quotaBlocked =
-    options?.requireQuota && me && !me.canStart && !me.activeSwapId;
+    (!eulaAccepted && !me?.eulaAccepted) ||
+    quotaBlocked;
 
   return {
     ready,
-    blocked: blocked || !!quotaBlocked,
+    blocked,
     me,
     userId,
     eulaOk: !!(eulaAccepted || me?.eulaAccepted),

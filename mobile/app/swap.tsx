@@ -9,7 +9,7 @@ import { ResonanceRing } from '../src/components/ResonanceRing';
 import { Screen } from '../src/components/Screen';
 import { GlassCard, OutlineButton, PrimaryButton, Subtitle, Title } from '../src/components/UI';
 import { copy } from '../src/copy';
-import { resetDraftAfterSend, useApp } from '../src/context/AppContext';
+import { useApp } from '../src/context/AppContext';
 import { useFlowGuard } from '../src/hooks/useFlowGuard';
 import { routes } from '../src/routes';
 import { colors, spacing } from '../src/theme';
@@ -24,7 +24,7 @@ function feedbackLabel(type: string | null) {
 
 export default function SwapScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { userId, refreshMe, setDraft } = useApp();
+  const { userId, refreshMe, clearDraft } = useApp();
   useFlowGuard();
   const [swap, setSwap] = useState<SwapView | null>(null);
   const [reveal, setReveal] = useState<FeedbackResponse | null>(null);
@@ -66,7 +66,7 @@ export default function SwapScreen() {
   const finish = async () => {
     setReveal(null);
     await refreshMe();
-    await resetDraftAfterSend(setDraft);
+    await clearDraft();
     router.replace(routes.home);
   };
 

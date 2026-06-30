@@ -107,8 +107,8 @@ app.post('/api/queue/join', joinLimit, (req, res) => {
   if (!intention || !content) {
     return res.status(400).json({ error: 'missing_fields' });
   }
-  if (content.length < 100 || content.length > 1500) {
-    return res.status(400).json({ error: 'invalid_length', min: 100, max: 1500 });
+  if (content.length < 25 || content.length > 1500) {
+    return res.status(400).json({ error: 'invalid_length', min: 25, max: 1500 });
   }
 
   const filtered = filterSecretContent(content);
