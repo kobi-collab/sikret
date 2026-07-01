@@ -12,7 +12,7 @@ import { hebrewText } from '../src/typography';
 
 export default function IntentionScreen() {
   const { draft, setDraft } = useApp();
-  const { blocked } = useFlowGuard({ requireQuota: true });
+  const { blocked } = useFlowGuard();
 
   if (blocked) return null;
 

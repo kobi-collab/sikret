@@ -12,7 +12,7 @@ import { useFlowGuard } from '../src/hooks/useFlowGuard';
 import { routes } from '../src/routes';
 import { colors } from '../src/theme';
 import { MIN_CHARS } from '../src/constants';
-import { getUserId } from '../src/storage';
+import { getDraft, getUserId } from '../src/storage';
 
 async function goToSwapIfReady(userId: string): Promise<string | null> {
   const s = await api.queueStatus(userId);
@@ -24,7 +24,7 @@ async function goToSwapIfReady(userId: string): Promise<string | null> {
 
 export default function QueueScreen() {
   const { ready, userId, draft, refreshMe, clearDraft, retryServerSync } = useApp();
-  const { blocked } = useFlowGuard({ requireQuota: true });
+  useFlowGuard();
   const [status, setStatus] = useState<'joining' | 'queued' | 'error' | 'idle'>('joining');
   const [hint, setHint] = useState(copy.queueJoining);
   const [joinAttempt, setJoinAttempt] = useState(1);
@@ -45,7 +45,7 @@ export default function QueueScreen() {
   );
 
   useEffect(() => {
-    if (!ready || blocked) return;
+    if (!ready) return;
 
     let cancelled = false;
 
@@ -66,7 +66,10 @@ export default function QueueScreen() {
         return;
       }
 
-      if (!draft.intention || !draft.content || draft.content.length < MIN_CHARS) {
+      const stored = await getDraft();
+      const intention = draft.intention ?? stored.intention;
+      const content = draft.content ?? stored.content;
+      if (!intention || !content || content.length < MIN_CHARS) {
         Alert.alert('שגיאה', 'חסרים פרטים לשליחה.', [{ text: 'אישור', onPress: () => router.back() }]);
         return;
       }
@@ -82,10 +85,7 @@ export default function QueueScreen() {
       }
 
       try {
-        const res = await api.joinQueue(uid, {
-          intention: draft.intention!,
-          content: draft.content!,
-        });
+        const res = await api.joinQueue(uid, { intention, content });
         if (cancelled) return;
 
         if (res.status === 'matched' && res.swapId) {
@@ -134,7 +134,7 @@ export default function QueueScreen() {
     return () => {
       cancelled = true;
     };
-  }, [ready, blocked, userId, joinAttempt, draft.intention, draft.content, clearDraft, retryServerSync]);
+  }, [ready, userId, joinAttempt, draft.intention, draft.content, clearDraft, retryServerSync]);
 
   useEffect(() => {
     if (status !== 'queued') return;

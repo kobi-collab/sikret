@@ -13,7 +13,7 @@ import { hebrewText } from '../src/typography';
 
 export default function ComposeScreen() {
   const { draft, setDraft } = useApp();
-  const { blocked } = useFlowGuard({ requireQuota: true });
+  const { blocked } = useFlowGuard();
   const len = draft.content?.length ?? 0;
   const valid = len >= MIN_CHARS && len <= MAX_CHARS;
 

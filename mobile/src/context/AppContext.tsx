@@ -152,19 +152,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [runServerSync]);
 
   useEffect(() => {
-    if (!ready || !userId) return;
+    if (!ready) return;
 
     const onAppState = async (state: AppStateStatus) => {
       if (state === 'active') {
         const stored = await getUserId();
         if (stored) setUid(stored);
+        const storedDraft = await getDraft();
+        if (storedDraft.intention || storedDraft.content) {
+          setDraftState(storedDraft);
+        }
         refreshMe();
       }
     };
 
     const sub = RNAppState.addEventListener('change', onAppState);
     return () => sub.remove();
-  }, [ready, userId, refreshMe]);
+  }, [ready, refreshMe]);
 
   const setDraft = useCallback((d: Draft) => {
     setDraftState((prev) => {

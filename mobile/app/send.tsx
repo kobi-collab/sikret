@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { EnvelopeOrb } from '../src/components/EnvelopeOrb';
 import { Screen } from '../src/components/Screen';
 import { GlassCard, PrimaryButton, Subtitle, Title } from '../src/components/UI';
@@ -11,47 +12,56 @@ import { MIN_CHARS } from '../src/constants';
 import { routes } from '../src/routes';
 import { colors, spacing } from '../src/theme';
 import { hebrewText } from '../src/typography';
-import { getUserId } from '../src/storage';
+import { getDraft, type Draft } from '../src/storage';
+
+async function resolveDraft(contextDraft: Draft): Promise<Draft> {
+  const stored = await getDraft();
+  return {
+    intention: contextDraft.intention ?? stored.intention,
+    content: contextDraft.content ?? stored.content,
+  };
+}
 
 export default function SendScreen() {
-  const { draft, refreshMe, retryServerSync } = useApp();
-  const { blocked } = useFlowGuard({ requireQuota: true });
+  const { draft, setDraft, refreshMe } = useApp();
+  const { blocked } = useFlowGuard();
   const [sending, setSending] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      getDraft().then((stored) => {
+        if (stored.intention || stored.content) {
+          setDraft(stored);
+        }
+      });
+      refreshMe();
+    }, [setDraft, refreshMe]),
+  );
 
   if (blocked) return null;
 
-  const send = async () => {
+  const send = () => {
     if (sending) return;
-    if (!draft.intention || !draft.content || draft.content.length < MIN_CHARS) {
-      Alert.alert('שגיאה', 'חסרים פרטים לשליחה.');
-      router.replace(routes.intention);
-      return;
-    }
 
     setSending(true);
-    try {
-      let profile = await refreshMe();
-      if (!profile) {
-        await retryServerSync();
-        profile = await refreshMe();
+    (async () => {
+      try {
+        const resolved = await resolveDraft(draft);
+        if (resolved.intention !== draft.intention || resolved.content !== draft.content) {
+          setDraft(resolved);
+        }
+
+        if (!resolved.intention || !resolved.content || resolved.content.length < MIN_CHARS) {
+          Alert.alert('שגיאה', 'חסרים פרטים לשליחה.');
+          router.replace(routes.intention);
+          return;
+        }
+
+        router.push(routes.queue);
+      } finally {
+        setSending(false);
       }
-      const uid = profile ? (await getUserId()) : null;
-      if (!profile || !uid) {
-        Alert.alert(copy.networkError, copy.serverWaking, [
-          { text: copy.retry, onPress: () => send() },
-        ]);
-        return;
-      }
-      if (!profile.canStart && !profile.activeSwapId) {
-        Alert.alert('שגיאה', copy.quotaExhausted, [
-          { text: 'אישור', onPress: () => router.replace(routes.home) },
-        ]);
-        return;
-      }
-      router.push(routes.queue);
-    } finally {
-      setSending(false);
-    }
+    })();
   };
 
   return (
@@ -64,7 +74,11 @@ export default function SendScreen() {
       <GlassCard>
         <Text style={styles.warn}>{copy.sendWarn}</Text>
       </GlassCard>
-      <PrimaryButton label={copy.sendCta} onPress={send} disabled={sending} />
+      <PrimaryButton
+        label={sending ? copy.queueJoining : copy.sendCta}
+        onPress={send}
+        disabled={sending}
+      />
     </Screen>
   );
 }
